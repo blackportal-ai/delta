@@ -36,6 +36,9 @@ use losses::Loss;
 use num_traits::Float;
 
 use ndarray::{Array1, Array2, ScalarOperand};
+use crate::devices::Device;
+#[cfg(all(target_os = "macos", feature = "metal"))]
+use crate::devices::osx_metal;
 
 /// Defines a common interface for classical machine learning models.
 ///
@@ -50,7 +53,7 @@ where
     ///
     /// This method should initialize the model with default parameters or learnable parameters
     /// set to initial values. The `Sized` constraint ensures that `Self` has a known size at compile time.
-    fn new(loss_function: L) -> Self
+    fn new(loss_function: L, device: Option<Device>) -> Self
     where
         Self: Sized;
 

@@ -31,6 +31,8 @@ use std::iter::Sum;
 
 use ndarray::{Array1, ScalarOperand};
 use num_traits::Float;
+use crate::devices::Device;
+use crate::devices::osx_metal::tensor_add_metal;
 
 /// A struct representing the Mean Squared Error (MSE) loss function.
 pub struct MSE;
@@ -46,11 +48,12 @@ pub trait Loss<T> {
     ///
     /// * `predictions` - A reference to an `Array1<T>` containing the predicted values.
     /// * `actuals` - A reference to an `Array1<T>` containing the actual values.
+    /// * `device` - A reference to a `Device` object representing the device on which the loss is calculated.
     ///
     /// # Returns
     ///
     /// Returns a value of type `T`, representing the calculated loss.
-    fn calculate(&self, predictions: &Array1<T>, actuals: &Array1<T>) -> T;
+    fn calculate(&self, predictions: &Array1<T>, actuals: &Array1<T>, device: &Device) -> T;
 }
 
 impl<T> Loss<T> for MSE
@@ -70,10 +73,20 @@ where
     /// # Returns
     ///
     /// Returns a value of type `T`, representing the calculated MSE.
-    fn calculate(&self, predictions: &Array1<T>, actuals: &Array1<T>) -> T {
+    fn calculate(&self, predictions: &Array1<T>, actuals: &Array1<T>, device: &Device) -> T {
         let m = T::from(predictions.len()).unwrap();
-        let diff = predictions - actuals;
-        (diff.mapv(|x| x.powi(2)).sum()) / m
+
+        match device {
+            Device::Cpu => {
+                let diff = predictions - actuals;
+                (diff.mapv(|x| x.powi(2)).sum()) / m
+            }
+
+            #[cfg(all(target_os = "macos", feature = "metal"))]
+            Device::Metal { device, queue } => {
+                todo!()
+            }
+        }
     }
 }
 
@@ -95,18 +108,27 @@ where
     /// # Returns
     ///
     /// Returns a value of type `T`, representing the calculated Cross-Entropy loss.
-    fn calculate(&self, predictions: &Array1<T>, actuals: &Array1<T>) -> T {
+    fn calculate(&self, predictions: &Array1<T>, actuals: &Array1<T>, device: &Device) -> T {
         let m = T::from(predictions.len()).unwrap();
         let epsilon = T::from(1e-15).unwrap();
 
-        predictions
-            .iter()
-            .zip(actuals.iter())
-            .map(|(p, y)| {
-                let p_clamped = p.max(epsilon).min(T::one() - epsilon);
-                -(y.clone() * p_clamped.ln() + (T::one() - y.clone()) * (T::one() - p_clamped).ln())
-            })
-            .sum::<T>()
-            / m
+        match device {
+            Device::Cpu => {
+                predictions
+                    .iter()
+                    .zip(actuals.iter())
+                    .map(|(p, y)| {
+                        let p_clamped = p.max(epsilon).min(T::one() - epsilon);
+                        -(y.clone() * p_clamped.ln() + (T::one() - y.clone()) * (T::one() - p_clamped).ln())
+                    })
+                    .sum::<T>()
+                    / m
+            },
+
+            #[cfg(all(target_os = "macos", feature = "metal"))]
+            Device::Metal { device, queue } => {
+                todo!()
+            }
+        }
     }
 }

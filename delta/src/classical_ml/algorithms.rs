@@ -31,7 +31,9 @@ use std::ops::SubAssign;
 
 use ndarray::{Array1, Array2, ScalarOperand};
 use num_traits::Float;
-
+use crate::devices::Device;
+#[cfg(all(target_os = "macos", feature = "metal"))]
+use crate::devices::osx_metal;
 use super::{Algorithm, batch_gradient_descent, logistic_gradient_descent, losses::Loss};
 
 /// A struct for performing linear regression.
@@ -47,6 +49,7 @@ where
     weights: Array1<T>,
     bias: T,
     loss_function: L,
+    device: Device
 }
 
 impl<T, L> LinearRegression<T, L>
@@ -63,7 +66,21 @@ where
     /// # Returns
     /// The calculated loss as a value of type `T`.
     pub fn calculate_loss(&self, predictions: &Array1<T>, actuals: &Array1<T>) -> T {
-        self.loss_function.calculate(predictions, actuals)
+        self.loss_function.calculate(predictions, actuals, &self.device)
+    }
+
+    /// Sets the device to use for the model.
+    pub fn use_optimized_device(&mut self) {
+        self.device = Device::default();
+
+        #[cfg(all(target_os = "macos", feature = "metal"))]
+        {
+            println!("Transferring data to Metal device.");
+            let (metal_device, metal_queue) = osx_metal::get_device_and_queue_metal();
+
+            self.device =
+                Device::Metal { device: metal_device.clone(), queue: metal_queue.clone() };
+        }
     }
 }
 
@@ -80,8 +97,12 @@ where
     ///
     /// # Returns
     /// A new instance of `LinearRegression`.
-    fn new(loss_function: L) -> Self {
-        LinearRegression { weights: Array1::zeros(1), bias: T::zero(), loss_function }
+    fn new(loss_function: L, device: Option<Device>) -> Self {
+        LinearRegression {
+            weights: Array1::zeros(1),
+            bias: T::zero(), loss_function,
+            device: device.unwrap_or_default()
+        }
     }
 
     /// Fits the model to the given data using batch gradient descent.
@@ -128,6 +149,7 @@ where
     weights: Array1<T>,
     bias: T,
     loss_function: L,
+    device: Device
 }
 
 impl<T, L> LogisticRegression<T, L>
@@ -144,7 +166,7 @@ where
     /// # Returns
     /// The calculated loss as a value of type `T`.
     pub fn calculate_loss(&self, predictions: &Array1<T>, actuals: &Array1<T>) -> T {
-        self.loss_function.calculate(predictions, actuals)
+        self.loss_function.calculate(predictions, actuals, &self.device)
     }
 
     // TODO: we should create generics for Activation
@@ -201,6 +223,20 @@ where
             .count();
         matches as f64 / actuals.len() as f64
     }
+
+    /// Sets the device to use for the model.
+    pub fn use_optimized_device(&mut self) {
+        self.device = Device::default();
+
+        #[cfg(all(target_os = "macos", feature = "metal"))]
+        {
+            println!("Transferring data to Metal device.");
+            let (metal_device, metal_queue) = osx_metal::get_device_and_queue_metal();
+
+            self.device =
+                Device::Metal { device: metal_device.clone(), queue: metal_queue.clone() };
+        }
+    }
 }
 
 impl<T, L> Algorithm<T, L> for LogisticRegression<T, L>
@@ -218,8 +254,12 @@ where
     ///
     /// # Returns
     /// - A new `LogisticRegression` instance with initialized weights and bias.
-    fn new(loss_function: L) -> Self {
-        LogisticRegression { weights: Array1::zeros(1), bias: T::zero(), loss_function }
+    fn new(loss_function: L, device: Option<Device>) -> Self {
+        LogisticRegression {
+            weights: Array1::zeros(1),
+            bias: T::zero(), loss_function,
+            device: device.unwrap_or_default()
+        }
     }
 
     /// Fits the logistic regression model to the training data using gradient descent.
@@ -281,7 +321,7 @@ mod tests {
         let x_data = Array2::from_shape_vec((4, 1), vec![1.0, 2.0, 3.0, 4.0]).unwrap();
         let y_data = Array1::from_vec(vec![2.0, 4.0, 6.0, 8.0]);
 
-        let mut model = LinearRegression::new(MSE);
+        let mut model = LinearRegression::new(MSE, None);
 
         let learning_rate = 0.1;
         let epochs = 1000;
@@ -299,7 +339,7 @@ mod tests {
         let predictions = Array1::from_vec(vec![2.0, 4.0, 6.0, 8.0]);
         let actuals = Array1::from_vec(vec![2.0, 4.0, 6.0, 8.0]);
 
-        let model = LinearRegression::new(MSE);
+        let model = LinearRegression::new(MSE, None);
 
         let loss = model.calculate_loss(&predictions, &actuals);
         assert!(loss.abs() < 1e-6, "Loss should be close to 0, got: {}", loss);
@@ -310,7 +350,7 @@ mod tests {
         let x_data = Array2::from_shape_vec((4, 1), vec![1.0, 2.0, 3.0, 4.0]).unwrap();
         let y_data = Array1::from_vec(vec![0.0, 0.0, 1.0, 1.0]);
 
-        let mut model = LogisticRegression::new(CrossEntropy);
+        let mut model = LogisticRegression::new(CrossEntropy, None);
 
         let learning_rate = 0.1;
         let epochs = 1000;
@@ -328,7 +368,7 @@ mod tests {
         let predictions = Array1::from_vec(vec![0.1, 0.2, 0.7, 0.9]);
         let actuals = Array1::from_vec(vec![0.0, 0.0, 1.0, 1.0]);
 
-        let model = LogisticRegression::new(CrossEntropy);
+        let model = LogisticRegression::new(CrossEntropy, None);
 
         let loss = model.calculate_loss(&predictions, &actuals);
         assert!(loss > 0.0, "Loss should be positive, got: {}", loss);
@@ -339,9 +379,35 @@ mod tests {
         let predictions = Array1::from_vec(vec![0.1, 0.8, 0.3, 0.7]);
         let actuals = Array1::from_vec(vec![0.0, 1.0, 1.0, 0.0]);
 
-        let model = LogisticRegression::new(CrossEntropy);
+        let model = LogisticRegression::new(CrossEntropy, None);
 
         let accuracy = model.calculate_accuracy(&predictions, &actuals);
         assert!((accuracy - 0.5).abs() < 1e-6, "Accuracy should be 0.5, got: {}", accuracy);
+    }
+
+    #[test]
+    fn test_linear_regression_device() {
+        let predictions = Array1::from_vec(vec![2.0, 4.0, 6.0, 8.0]);
+        let actuals = Array1::from_vec(vec![2.0, 4.0, 6.0, 8.0]);
+
+        let mut model = LinearRegression::new(MSE, None);
+
+        model.use_optimized_device();
+
+        let loss = model.calculate_loss(&predictions, &actuals);
+        assert!(loss.abs() < 1e-6, "Loss should be close to 0, got: {}", loss);
+    }
+
+    #[test]
+    fn test_logistic_regression_device() {
+        let predictions = Array1::from_vec(vec![0.1, 0.2, 0.7, 0.9]);
+        let actuals = Array1::from_vec(vec![0.0, 0.0, 1.0, 1.0]);
+
+        let mut model = LogisticRegression::new(CrossEntropy, None);
+
+        model.use_optimized_device();
+
+        let loss = model.calculate_loss(&predictions, &actuals);
+        assert!(loss > 0.0, "Loss should be positive, got: {}", loss);
     }
 }

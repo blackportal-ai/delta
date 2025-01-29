@@ -10,7 +10,7 @@ async fn main() {
     let y_data = Array1::from_vec(vec![0.0, 0.0, 1.0, 1.0, 1.0]);
 
     // Instantiate the model
-    let mut model = LogisticRegression::new(CrossEntropy);
+    let mut model = LogisticRegression::new(CrossEntropy, None);
 
     // Train the model
     let learning_rate = 0.01;
