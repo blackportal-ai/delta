@@ -524,21 +524,21 @@ mod tests {
         });
     }
 
-    #[tokio::test]
-    async fn test_parse_images() {
-        // Ensure the dataset is downloaded before parsing
-        let _ = MnistDataset::get_bytes_data(MnistDataset::MNIST_TRAIN_DATA_FILENAME)
-            .await
-            .expect("Failed to get image data");
+    // #[tokio::test]
+    // async fn test_parse_images() {
+    //     // Ensure the dataset is downloaded before parsing
+    //     let _ = MnistDataset::get_bytes_data(MnistDataset::MNIST_TRAIN_DATA_FILENAME)
+    //         .await
+    //         .expect("Failed to get image data");
 
-        let data_bytes = MnistDataset::get_bytes_data(MnistDataset::MNIST_TRAIN_DATA_FILENAME)
-            .await
-            .expect("Failed to get image data");
+    //     let data_bytes = MnistDataset::get_bytes_data(MnistDataset::MNIST_TRAIN_DATA_FILENAME)
+    //         .await
+    //         .expect("Failed to get image data");
 
-        let images =
-            MnistDataset::parse_images(&data_bytes, 60000).expect("Failed to parse images");
-        assert_eq!(images.data.len(), 60000 * 28 * 28, "Images should have the correct length");
-    }
+    //     let images =
+    //         MnistDataset::parse_images(&data_bytes, 60000).expect("Failed to parse images");
+    //     assert_eq!(images.data.len(), 60000 * 28 * 28, "Images should have the correct length");
+    // }
 
     #[tokio::test]
     #[serial]

@@ -33,6 +33,7 @@ serial_test = "3.2"
 rand_distr = "0.4.3"
 libm = "0.2.11"
 rayon = "1.10.0"
+linfa-datasets = { version = "0.x", features = ["iris"] }
 
 [dependencies.num-traits]
 version = "0.2"

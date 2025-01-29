@@ -27,10 +27,13 @@
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::ops::SubAssign;
+use std::fmt::Debug;
+use std::{collections::HashSet, ops::SubAssign};
+use std::collections::HashMap;
 
+use libm::log2;
 use ndarray::{Array1, Array2, ScalarOperand};
-use num_traits::Float;
+use num_traits::{Float, FromPrimitive};
 
 use super::{Algorithm, batch_gradient_descent, logistic_gradient_descent, losses::Loss};
 
@@ -265,6 +268,322 @@ where
     }
 }
 
+/// TreeNode can be a `Internal` or `Leaf` at any given moment
+/// 
+
+#[derive(Debug)]
+enum TreeNode<T, P> {
+    Internal { 
+        feature: Option<usize>,
+        threshold: Option<T>,
+        left: Option<Box<TreeNode<T, P>>>,
+        right: Option<Box<TreeNode<T, P>>> 
+    },
+    Leaf { 
+        prediction: P,
+        indices: Array1<usize>
+    },
+} 
+impl<T, P> TreeNode<T, P> {
+    fn new_empty() -> Box<TreeNode<T, P>>{
+        Box::new(TreeNode::Internal { 
+            feature: None,
+            threshold: None,
+            left: None,
+            right: None 
+        })
+    }
+}
+
+/// A struct for performing Decision Tree classification.
+///
+/// # Generics
+/// - `T`: The type of data, must implement `num_traits::Float` and `ndarray::ScalarOperand`.
+/// - `L`: The type of the loss function, must implement `Loss<T>`.
+pub struct DecisionTreeClassifier<T, L>
+where
+    T: Float+ Debug,
+    L: Loss<T>,
+{
+    max_depth: usize,
+    min_loss: f64,
+    _loss_function: L,
+    data_x: Option<Array2<T>>,
+    data_y: Option<Array1<usize>>,
+    root: Option<TreeNode<T, usize>>,
+}
+
+impl<T, L> DecisionTreeClassifier<T, L>
+where
+    T: Float + FromPrimitive + Debug,
+    L: Loss<T>,
+{
+    /// Creates a new `DecisionTree` instance.
+    ///
+    /// # Arguments
+    /// - `max_depth`: The maximum depth of the tree.
+    /// - `loss_function`: The loss function to use.
+    ///S
+    /// # Returns
+    /// A new instance of `DecisionTree`.
+    pub fn new(max_depth: usize, min_loss: f64, loss_function: L) -> Self {
+        DecisionTreeClassifier { 
+            max_depth, 
+            min_loss,
+            _loss_function: loss_function, 
+            data_x: None,
+            data_y: None,
+            root: None 
+        }
+    }
+
+    /// Recursively splits the data based on the best feature and threshold.
+    fn build_tree(&mut self, node: &mut TreeNode<T, usize>, indices: Array1<usize>, depth: usize) {
+        // println!("TOP: depth: {}, node {:?}", depth, node);
+        // println!("indices len : {}", indices.len());
+        if depth >= self.max_depth || indices.shape()[0] <= 1 {
+            
+            let prediction = self.calculate_leaf_prediction(&indices).unwrap();
+            
+            // Update this node to Leaf Node
+            *node = TreeNode::Leaf { prediction, indices};
+            // println!("BOTTOM: depth: {}, node {:?}", depth, node);
+            return;
+        }
+
+        // Check If Pure If yes then assign this node as leaf 
+        let data_y_ref = self.data_y.as_ref().unwrap();
+        let classes: HashSet<_> = indices.iter()
+            .map(|&idx| data_y_ref[idx])
+            .collect();
+        let mut class_counts: HashMap<usize, usize> = classes
+            .iter()
+            .map(|class| (*class, 0))
+            .collect();
+        for &idx in indices.iter() {
+            let class = data_y_ref[idx];
+            *class_counts.get_mut(&class).unwrap() += 1;
+        }
+        let loss = Self::calculate_entropy(&class_counts);
+
+        if loss <= self.min_loss {
+            let prediction = self.calculate_leaf_prediction(&indices).unwrap();
+            
+            // Update this node to Leaf Node
+            *node = TreeNode::Leaf { prediction, indices};
+            // println!("BOTTOM: depth: {}, node {:?}", depth, node);
+            return;
+        }
+        
+        
+        // Main Decision Tree Algorithm 
+        let (best_feature, best_threshold) = self.find_best_split(&indices);
+        let (index_left, index_right) = self.split_data(indices, best_feature, best_threshold);
+        
+        // Initialize the Left and Right Nodes
+        let mut left_node = TreeNode::new_empty();
+        let mut right_node = TreeNode::new_empty();
+        
+        // Recursively build left and right subtrees
+        self.build_tree(&mut left_node, index_left, depth + 1);
+        self.build_tree(&mut right_node, index_right, depth + 1);
+
+        // Update the current Node
+        *node = TreeNode::Internal { 
+            feature: Some(best_feature),
+            threshold: Some(best_threshold),
+            left: Some(left_node),
+            right: Some(right_node)
+        };
+        
+        // println!("BOTTOM: depth: {}, node {:?}", depth, node);
+    }
+    
+    fn calculate_leaf_prediction(&self, indices: &Array1<usize>) -> Option<usize> {
+        let mut frequency_map = HashMap::new();
+        for &val in indices {
+            *frequency_map.entry(self.data_y.as_ref().unwrap()[val]).or_insert(0) += 1;
+        }
+        frequency_map.into_iter().max_by_key(|&(_, count)| count).map(|(value, _)| value)
+    }
+
+    fn find_best_split(&self, indices: &Array1<usize>) -> (usize, T) {
+        
+        let (num_rows, num_features) = (indices.shape()[0], self.data_x.as_ref().unwrap().shape()[1]);
+
+        
+        let mut best_loss = f64::MAX;// Replace this with the loss of parent node
+        let mut best_threshold_idx = 0_usize;
+        let mut best_feature_idx = 0_usize;
+        
+        let data_y_ref = self.data_y.as_ref().unwrap();
+        let data_x_ref = self.data_x.as_ref().unwrap();
+        
+        for feature in 0..num_features {
+            
+            // Create a 2D array with index and feature values
+            let mut feature_values: Vec<(usize, T)> = indices
+            .iter()
+                .map(|&idx| (idx, self.data_x.as_ref().unwrap()[[idx, feature]]))
+                .collect();
+
+            // Sort by feature value
+            feature_values.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+
+            // Extract sorted indices
+            let sorted_indices: Vec<usize> = feature_values.iter().map(|&(idx, _)| idx).collect();
+
+            // Initialize a hashmap to store class distributions
+            let subset_classes: HashSet<_> = sorted_indices.iter()
+                .map(|&idx| data_y_ref[idx])
+                .collect();
+            
+            let mut class_counts_left: HashMap<usize, usize> = subset_classes
+                .iter()
+                .map(|class| (*class, 0))
+                .collect();
+
+            let mut class_counts_right: HashMap<usize, usize> = subset_classes
+                .iter()
+                .map(|class| (*class, 0))
+                .collect();
+
+            for &idx in sorted_indices.iter() {
+                let class = data_y_ref[idx];
+                *class_counts_right.get_mut(&class).unwrap() += 1;
+            }
+            
+            // Find the best Threshold among all the threshold
+            for (idx, &threshold_idx) in sorted_indices.iter().enumerate() {
+
+                // Left sunbet have < and right have >=
+                let class = data_y_ref[threshold_idx];
+                if idx == 0 {
+                    *class_counts_left.get_mut(&class).unwrap() += 1_usize;
+                    *class_counts_right.get_mut(&class).unwrap() -= 1_usize;
+                    continue;
+                }
+                // Find the Entropy for current Threshold
+                let loss_left = Self::calculate_entropy(&class_counts_left);
+                let loss_right = Self::calculate_entropy(&class_counts_right);
+
+                // Finding overall loss of split
+                let total_loss = loss_left * ((idx) as f64)/(num_rows as f64) + 
+                                    loss_right * ((num_rows-idx) as f64)/(num_rows as f64);
+                
+                // Upating the best loss and threshold
+                if total_loss < best_loss {
+                    best_loss = total_loss;
+                    best_feature_idx = feature;
+                    best_threshold_idx = threshold_idx;
+                }
+                
+                // Update Class Counts
+                *class_counts_left.get_mut(&class).unwrap() += 1_usize;
+                *class_counts_right.get_mut(&class).unwrap() -= 1_usize;
+
+            }
+        }
+        (best_feature_idx, data_x_ref[[best_threshold_idx, best_feature_idx]])
+    }
+    
+    fn calculate_entropy(class_counts: &HashMap<usize, usize>) -> f64 {
+        let subset_size= class_counts.values().sum::<usize>() as f64;
+        let entropy = class_counts
+            .into_iter()
+            .map(|(_, &count)|{
+                if count == 0_usize {
+                    0 as f64
+                }
+                else {
+                    let p = (count as f64) / subset_size;
+                    (-p) * log2(p)
+                }
+            }).sum::<f64>();     
+
+        entropy
+    }
+
+
+    /// Splits the data given threshold and feature
+    /// 
+    /// `Moves the data and returns the splitted data.`
+    fn split_data(
+        &self,
+        indices: Array1<usize>,
+        feature: usize,
+        threshold: T,
+    ) -> (Array1<usize>, Array1<usize>) {
+        
+        let data_x_ref = self.data_x.as_ref().unwrap();
+        let (left_indices, right_indices): (Vec<_>, Vec<_>) = indices
+            .iter()
+            .partition(|&&idx| data_x_ref[[idx, feature]] < threshold);
+        // println!("Left-Indices Len: {}, Right-Indices Len: {}", left_indices.len(), right_indices.len());
+        (Array1::from(left_indices), Array1::from(right_indices))
+    }
+}
+
+impl<T, L> Algorithm<T, L> for DecisionTreeClassifier<T, L>
+where
+    T: Float + FromPrimitive + Debug,
+    L: Loss<T>,
+{
+    fn new(loss_function: L) -> Self {
+        DecisionTreeClassifier { 
+            max_depth: 10,
+            min_loss: 1e-6,
+            _loss_function: loss_function,
+            data_x: None,
+            data_y: None, 
+            root: None 
+        }
+    }
+
+    fn fit(&mut self, x: &Array2<T>, y: &Array1<T>, _learning_rate: T, _epochs: usize) {
+        self.data_x = Some(x.clone());
+        // Type cast classes to usize
+        self.data_y = Some(y.mapv(|x| x.to_usize().unwrap()));
+
+        let mut root = TreeNode::new_empty();
+        let index = Array1::from_iter(0..x.shape()[0]);
+        self.build_tree(&mut root, index, 0);
+        self.root = Some(*root);
+    }
+
+    fn predict(&self, x: &Array2<T>) -> Array1<T> {
+        // Implement the prediction logic by traversing the tree
+
+        let mut predictions = Vec::with_capacity(x.shape()[0]);
+
+        if let Some(root) = &self.root {
+            for i in 0..x.shape()[0] {
+                let mut current = root;
+                loop {
+                    match current {
+                        TreeNode::Leaf { prediction, .. } => {
+                            predictions.push(*prediction);
+                            break;
+                        }
+                        TreeNode::Internal { feature, threshold, left, right, .. } => {
+                            let value = x[[i, feature.unwrap()]];
+                            current = if value < threshold.unwrap() {
+                                left.as_ref().unwrap()
+                            } else {
+                                right.as_ref().unwrap()
+                            };
+                        }
+                    }
+                }
+            }
+        }
+        Array1::from_iter(predictions.into_iter().map(|x| T::from_usize(x).unwrap()))
+
+    }
+}
+
+
+
 #[cfg(test)]
 mod tests {
     use ndarray::{Array1, Array2};
@@ -275,6 +594,8 @@ mod tests {
         algorithms::{LinearRegression, LogisticRegression},
         losses::{CrossEntropy, MSE},
     };
+
+    use super::DecisionTreeClassifier;
 
     #[test]
     fn test_linear_regression_fit_predict() {
@@ -338,10 +659,62 @@ mod tests {
     fn test_logistic_regression_calculate_accuracy() {
         let predictions = Array1::from_vec(vec![0.1, 0.8, 0.3, 0.7]);
         let actuals = Array1::from_vec(vec![0.0, 1.0, 1.0, 0.0]);
-
+        
         let model = LogisticRegression::new(CrossEntropy);
-
+        
         let accuracy = model.calculate_accuracy(&predictions, &actuals);
         assert!((accuracy - 0.5).abs() < 1e-6, "Accuracy should be 0.5, got: {}", accuracy);
+    }
+
+    #[test]
+    fn test_iris_data_loading() {
+        let (train, _) = linfa_datasets::iris()
+                                .split_with_ratio(0.8);
+
+        println!("X =  {:?}", train.records());
+        println!("y =  {:?}", train.targets());
+        
+    }
+    #[test]
+    fn test_decision_tree_fit_predict() {
+        let (train, test) = linfa_datasets::iris()
+            .split_with_ratio(0.8);
+
+        // Convert train data to ndarray format
+        let x_train = Array2::from_shape_vec(
+            (train.records().nrows(), train.records().ncols()),
+            train.records().to_owned().into_raw_vec()
+        ).unwrap();
+
+        let y_train = Array1::from_shape_vec(
+            train.targets().len(),
+            train.targets().iter().map(|&x| x as f64).collect()
+        ).unwrap();
+
+        // Convert test data to ndarray format
+        let x_test = Array2::from_shape_vec(
+            (test.records().nrows(), test.records().ncols()),
+            test.records().to_owned().into_raw_vec()
+        ).unwrap();
+
+        let y_test = Array1::from_shape_vec(
+            test.targets().len(),
+            test.targets().iter().map(|&x| x as f64).collect()
+        ).unwrap();
+
+        let mut model = DecisionTreeClassifier::new(10, 1e-6, MSE);
+        model.fit(&x_train, &y_train, 0.1, 100);
+
+        let predictions = model.predict(&x_test);
+        
+
+        // Calculate and print the accuracy
+        let correct_predictions = predictions.iter()
+            .zip(y_test.iter())
+            .filter(|(&pred, &actual)| (pred - actual).abs() < 1e-6)
+            .count();
+        let accuracy = correct_predictions as f64 / y_test.len() as f64;
+        println!("Test accuracy: {:.2}%", accuracy * 100.0);
+
     }
 }
