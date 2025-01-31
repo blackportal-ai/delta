@@ -104,7 +104,7 @@ where
             .zip(actuals.iter())
             .map(|(p, y)| {
                 let p_clamped = p.max(epsilon).min(T::one() - epsilon);
-                -(y.clone() * p_clamped.ln() + (T::one() - y.clone()) * (T::one() - p_clamped).ln())
+                -(*y * p_clamped.ln() + (T::one() - *y) * (T::one() - p_clamped).ln())
             })
             .sum::<T>()
             / m

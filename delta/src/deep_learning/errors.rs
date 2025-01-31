@@ -52,6 +52,16 @@ pub enum OptimizerError {
     IncompatibleGradientWeightShape(Vec<usize>, Vec<usize>),
     /// Error when epsilon is not set or is invalid.
     InvalidEpsilon(String),
+    /// Error when beta parameter is invalid.
+    InvalidBeta(String),
+    /// Error when weight decay parameter is invalid.
+    InvalidWeightDecay(String),
+    /// Error when gradient contains invalid values (NaN or Inf).
+    InvalidGradient(String),
+    /// Error when weight contains invalid values (NaN or Inf).
+    InvalidWeight(String),
+    /// Error when shapes don't match
+    ShapeMismatch(String),
 }
 
 /// An enumeration of possible errors that can occur in a model.
@@ -88,6 +98,21 @@ pub enum LayerError {
     OptimizerError(OptimizerError),
 }
 
+/// Errors that can occur during gradient projection
+#[derive(Debug)]
+pub enum ProjectionError {
+    /// Error when projection type is invalid or not implemented
+    InvalidProjectionType(String),
+    /// Error when orthogonal matrix is not initialized
+    UninitializedMatrix,
+    /// Error when shapes are incompatible for projection
+    IncompatibleShape(String),
+    /// Error when device mismatch occurs
+    DeviceMismatch(String),
+    /// Error when rank is invalid
+    InvalidRank(String),
+}
+
 impl fmt::Display for OptimizerError {
     /// Formats the `OptimizerError` for display purposes.
     ///
@@ -105,6 +130,11 @@ impl fmt::Display for OptimizerError {
                 write!(f, "Gradient shape {:?} is incompatible with weight shape {:?}", g, w)
             }
             OptimizerError::InvalidEpsilon(s) => write!(f, "{}", s),
+            OptimizerError::InvalidBeta(s) => write!(f, "{}", s),
+            OptimizerError::InvalidWeightDecay(s) => write!(f, "{}", s),
+            OptimizerError::InvalidGradient(s) => write!(f, "{}", s),
+            OptimizerError::InvalidWeight(s) => write!(f, "{}", s),
+            OptimizerError::ShapeMismatch(s) => write!(f, "Shape mismatch: {}", s),
         }
     }
 }
@@ -146,6 +176,23 @@ impl fmt::Display for LayerError {
     }
 }
 
+impl fmt::Display for ProjectionError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ProjectionError::InvalidProjectionType(s) => {
+                write!(f, "Invalid projection type: {}", s)
+            }
+            ProjectionError::UninitializedMatrix => {
+                write!(f, "Orthogonal matrix must be initialized")
+            }
+            ProjectionError::IncompatibleShape(s) => write!(f, "Incompatible shapes: {}", s),
+            ProjectionError::DeviceMismatch(s) => write!(f, "Device mismatch: {}", s),
+            ProjectionError::InvalidRank(s) => write!(f, "Invalid rank: {}", s),
+        }
+    }
+}
+
 impl std::error::Error for LayerError {}
 impl std::error::Error for OptimizerError {}
 impl std::error::Error for ModelError {}
+impl std::error::Error for ProjectionError {}
