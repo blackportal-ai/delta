@@ -8,12 +8,29 @@ members = [
     "examples/deep_learning/imagenet_v2",
     "examples/classical_ml/linear_regression",
     "examples/classical_ml/logistic_regression",
-
 ]
 resolver = "2"
 
 [workspace.dependencies]
 tokio = { version = "1.32.0", features = ["full"] }
 
-[workspace.dev-dependencies]
-flamegraph = "0.6.6"
+
+[profile.dev]
+opt-level = 0
+debug = true
+panic = "abort"
+
+[profile.test]
+opt-level = 0
+debug = true
+
+[profile.release]
+opt-level = 3
+debug = false
+panic = "unwind"
+lto = true
+codegen-units = 1
+
+[profile.bench]
+opt-level = 3
+debug = false

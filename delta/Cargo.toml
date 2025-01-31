@@ -48,22 +48,5 @@ deep_learning = []
 vision = ["deep_learning"]
 metal = ["dep:metal"]
 
-[profile.dev]
-opt-level = 0
-debug = true
-panic = "abort"
-
-[profile.test]
-opt-level = 0
-debug = true
-
-[profile.release]
-opt-level = 3
-debug = false
-panic = "unwind"
-lto = true
-codegen-units = 1
-
-[profile.bench]
-opt-level = 3
-debug = false
+[dev-dependencies]
+flamegraph = "0.6.6"
