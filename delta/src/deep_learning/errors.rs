@@ -52,6 +52,16 @@ pub enum OptimizerError {
     IncompatibleGradientWeightShape(Vec<usize>, Vec<usize>),
     /// Error when epsilon is not set or is invalid.
     InvalidEpsilon(String),
+    /// Error when beta parameter is invalid.
+    InvalidBeta(String),
+    /// Error when weight decay parameter is invalid.
+    InvalidWeightDecay(String),
+    /// Error when gradient contains invalid values (NaN or Inf).
+    InvalidGradient(String),
+    /// Error when weight contains invalid values (NaN or Inf).
+    InvalidWeight(String),
+    /// Error when shapes don't match
+    ShapeMismatch(String),
 }
 
 /// An enumeration of possible errors that can occur in a model.
@@ -105,6 +115,11 @@ impl fmt::Display for OptimizerError {
                 write!(f, "Gradient shape {:?} is incompatible with weight shape {:?}", g, w)
             }
             OptimizerError::InvalidEpsilon(s) => write!(f, "{}", s),
+            OptimizerError::InvalidBeta(s) => write!(f, "{}", s),
+            OptimizerError::InvalidWeightDecay(s) => write!(f, "{}", s),
+            OptimizerError::InvalidGradient(s) => write!(f, "{}", s),
+            OptimizerError::InvalidWeight(s) => write!(f, "{}", s),
+            OptimizerError::ShapeMismatch(s) => write!(f, "Shape mismatch: {}", s),
         }
     }
 }
