@@ -532,7 +532,6 @@ where
 
     fn predict(&self, x: &Array2<T>) -> Array1<T> {
         // Implement the prediction logic by traversing the tree
-
         let mut predictions = Vec::with_capacity(x.shape()[0]);
 
         if let Some(root) = &self.root {
