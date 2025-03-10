@@ -89,7 +89,7 @@ impl Cifar100Dataset {
             let path = entry.path().unwrap().into_owned();
             let file_name = path.file_name().unwrap().to_string_lossy().to_string();
 
-            if path.is_dir() || !path.extension().map_or(false, |ext| ext == "bin") {
+            if path.is_dir() || path.extension().is_none_or(|ext| ext != "bin") {
                 continue;
             }
 
