@@ -430,7 +430,7 @@ where
     /// # Arguments
     /// - `max_depth`: The maximum depth of the tree.
     /// - `loss_function`: The loss function to use.
-    ///S
+    ///
     /// # Returns
     /// A new instance of `DecisionTree`.
     pub fn new(max_depth: usize, min_loss: f64, loss_function: L) -> Self {
@@ -575,7 +575,7 @@ where
     fn calculate_entropy(class_counts: &HashMap<usize, usize>) -> f64 {
         let subset_size = class_counts.values().sum::<usize>() as f64;
         let entropy = class_counts
-            .into_iter()
+            .iter()
             .map(|(_, &count)| {
                 if count == 0_usize {
                     0 as f64
@@ -663,6 +663,7 @@ where
 }
 
 #[cfg(test)]
+mod tests {
     use ndarray::{Array1, Array2};
     use num_traits::Float;
 
