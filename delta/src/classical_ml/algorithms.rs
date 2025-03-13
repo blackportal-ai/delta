@@ -313,6 +313,10 @@ where
         }
         counts.into_iter().max_by_key(|&(_, count)| count).map(|(pred, _)| pred).unwrap()
     }
+
+    pub fn calculate_loss(&self, predictions: &Array1<T>, actuals: &Array1<T>) -> T {
+        self.loss_function.calculate(predictions, actuals)
+    }
 }
 
 impl<T, L> Algorithm<T, L> for RandomForest<T, L>
@@ -828,9 +832,7 @@ mod tests {
 
         let mut model = RandomForest::new(CrossEntropy);
 
-        println!("Fitting the model...");
         model.fit(&x_train, &y_train, 0.1, 100);
-        println!("Model fitted.");
 
         let predictions = model.predict(&x_test);
 
@@ -840,7 +842,13 @@ mod tests {
             .zip(y_test.iter())
             .filter(|(&pred, &actual)| (pred - actual).abs() < 1e-6)
             .count();
+
         let accuracy = correct_predictions as f64 / y_test.len() as f64;
+        let loss = model.calculate_loss(&predictions, &y_test);
+
         println!("Test accuracy: {:.2}%", accuracy * 100.0);
+
+        assert!(accuracy > 0.0, "Accuracy should be positive, got: {}", accuracy);
+        assert!(loss < 0.0, "Loss should be less than 0, got: {}", loss);
     }
 }
