@@ -80,6 +80,7 @@ being awesome contributors to this project. **We'd like to take a moment to reco
 [<img src="https://github.com/SauersML.png?size=72" alt="SauersML" width="72">](https://github.com/SauersML)
 [<img src="https://github.com/zfyre.png?size=72" alt="zfyre" width="72">](https://github.com/zfyre)
 [<img src="https://github.com/DarthB.png?size=72" alt="DarthB" width="72">](https://github.com/DarthB)
+[<img src="https://github.com/sutt0n.png?size=72" alt="sutt0n" width="72">](https://github.com/sutt0n)
 
 ## License
 
