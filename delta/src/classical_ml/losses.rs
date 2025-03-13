@@ -33,14 +33,16 @@ use ndarray::{Array1, ScalarOperand};
 use num_traits::Float;
 
 /// A struct representing the Mean Squared Error (MSE) loss function.
+#[derive(Clone)]
 pub struct MSE;
 
 /// A struct representing the Cross-Entropy loss function.
+#[derive(Clone)]
 pub struct CrossEntropy;
 
 /// A struct representing the Entropy Loss for Decision Treee
+#[derive(Clone)]
 pub struct Entropy;
-
 
 /// A trait for loss functions, which calculates the error between predictions and actual values.
 pub trait Loss<T> {

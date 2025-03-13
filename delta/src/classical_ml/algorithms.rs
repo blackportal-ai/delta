@@ -32,8 +32,9 @@ use std::fmt::Debug;
 use std::{collections::HashSet, ops::SubAssign};
 
 use libm::log2;
-use ndarray::{Array1, Array2, ScalarOperand};
+use ndarray::{Array1, Array2, Axis, ScalarOperand};
 use num_traits::{Float, FromPrimitive};
+use rand::Rng;
 
 use super::{Algorithm, batch_gradient_descent, logistic_gradient_descent, losses::Loss};
 
@@ -268,6 +269,115 @@ where
     }
 }
 
+/// A struct for performing Random Forest classification.
+///
+/// This implementation builds an ensemble of decision trees (each built via bootstrap sampling)
+/// and uses majority voting for prediction.
+pub struct RandomForest<T, L>
+where
+    T: Float,
+    L: Loss<T> + Clone, // clone required here to pass loss_function to each decision tree
+{
+    trees: Vec<TreeNode<T, usize>>,
+    n_trees: usize,
+    sample_size: usize,
+    max_depth: usize,
+    min_loss: f64,
+    loss_function: L,
+}
+
+impl<T, L> RandomForest<T, L>
+where
+    T: Float + FromPrimitive,
+    L: Loss<T> + Clone,
+{
+    fn predict_tree(&self, row: &Array1<T>, node: &TreeNode<T, usize>) -> usize {
+        match node {
+            TreeNode::Leaf { prediction, .. } => *prediction,
+            TreeNode::Internal { feature, threshold, left, right } => {
+                let f = feature.expect("Internal node must have a feature");
+                let th = threshold.expect("Internal node must have a threshold");
+                if row[f] < th {
+                    self.predict_tree(row, left.as_ref().expect("Left node missing"))
+                } else {
+                    self.predict_tree(row, right.as_ref().expect("Right node missing"))
+                }
+            }
+        }
+    }
+
+    fn majority_vote(&self, votes: &[usize]) -> usize {
+        let mut counts = HashMap::new();
+        for &v in votes {
+            *counts.entry(v).or_insert(0) += 1;
+        }
+        counts.into_iter().max_by_key(|&(_, count)| count).map(|(pred, _)| pred).unwrap()
+    }
+}
+
+impl<T, L> Algorithm<T, L> for RandomForest<T, L>
+where
+    T: Debug + Float + FromPrimitive + SubAssign,
+    L: Loss<T> + Clone,
+{
+    /// Creates a new RandomForest instance.
+    fn new(loss_function: L) -> Self {
+        RandomForest {
+            trees: Vec::new(),
+            n_trees: 10,
+            sample_size: 0,
+            max_depth: 10,
+            min_loss: 1e-6,
+            loss_function,
+        }
+    }
+
+    /// Fits the RandomForest by training each decision tree on a bootstrap sample.
+    /// If `sample_size` is 0 then we use all available samples.
+    fn fit(&mut self, x: &Array2<T>, y: &Array1<T>, _learning_rate: T, _epochs: usize) {
+        if self.sample_size == 0 {
+            self.sample_size = x.shape()[0];
+        }
+
+        self.trees.clear();
+        let n_samples = x.shape()[0];
+        let mut rng = rand::thread_rng();
+
+        for _ in 0..self.n_trees {
+            let indices: Vec<usize> =
+                (0..self.sample_size).map(|_| rng.gen_range(0..n_samples)).collect();
+
+            let x_bootstrap = x.select(Axis(0), &indices);
+            let y_bootstrap = y
+                .select(Axis(0), &indices)
+                .mapv(|val| val.to_usize().expect("Failed to convert label to usize"));
+
+            let mut dtc = DecisionTreeClassifier::new(
+                self.max_depth,
+                self.min_loss,
+                self.loss_function.clone(),
+            );
+
+            dtc.fit(&x_bootstrap, &y_bootstrap.mapv(|v| T::from_usize(v).unwrap()), T::zero(), 1);
+
+            if let Some(root) = dtc.root {
+                self.trees.push(root);
+            }
+        }
+    }
+
+    fn predict(&self, x: &Array2<T>) -> Array1<T> {
+        let mut predictions = Vec::with_capacity(x.shape()[0]);
+        for row in x.outer_iter() {
+            let votes: Vec<usize> =
+                self.trees.iter().map(|tree| self.predict_tree(&row.to_owned(), tree)).collect();
+            let majority = self.majority_vote(&votes);
+            predictions.push(T::from_usize(majority).unwrap());
+        }
+        Array1::from(predictions)
+    }
+}
+
 /// Represents a node in a decision tree, which can be either an `Internal` node or a `Leaf` node at any given moment.
 ///
 /// This enum is generic over two type parameters:
@@ -320,7 +430,7 @@ where
     /// # Arguments
     /// - `max_depth`: The maximum depth of the tree.
     /// - `loss_function`: The loss function to use.
-    ///S
+    ///
     /// # Returns
     /// A new instance of `DecisionTree`.
     pub fn new(max_depth: usize, min_loss: f64, loss_function: L) -> Self {
@@ -336,18 +446,17 @@ where
 
     /// Recursively splits the data based on the best feature and threshold.
     fn build_tree(&mut self, node: &mut TreeNode<T, usize>, indices: Array1<usize>, depth: usize) {
-        // println!("TOP: depth: {}, node {:?}", depth, node);
-        // println!("indices len : {}", indices.len());
-        if depth >= self.max_depth || indices.shape()[0] <= 1 {
-            let prediction = self.calculate_leaf_prediction(&indices).unwrap();
-
-            // Update this node to Leaf Node
-            *node = TreeNode::Leaf { prediction, indices };
-            // println!("BOTTOM: depth: {}, node {:?}", depth, node);
+        if indices.is_empty() {
+            *node = TreeNode::Leaf { prediction: 0, indices };
             return;
         }
 
-        // Check If Pure If yes then assign this node as leaf
+        if depth >= self.max_depth || indices.shape()[0] <= 1 {
+            let prediction = self.calculate_leaf_prediction(&indices).unwrap();
+            *node = TreeNode::Leaf { prediction, indices };
+            return;
+        }
+
         let data_y_ref = self.data_y.as_ref().unwrap();
         let classes: HashSet<_> = indices.iter().map(|&idx| data_y_ref[idx]).collect();
         let mut class_counts: HashMap<usize, usize> =
@@ -360,14 +469,10 @@ where
 
         if loss <= self.min_loss {
             let prediction = self.calculate_leaf_prediction(&indices).unwrap();
-
-            // Update this node to Leaf Node
             *node = TreeNode::Leaf { prediction, indices };
-            // println!("BOTTOM: depth: {}, node {:?}", depth, node);
             return;
         }
 
-        // Main Decision Tree Algorithm
         let (best_feature, best_threshold) = self.find_best_split(&indices);
         let (index_left, index_right) = self.split_data(indices, best_feature, best_threshold);
 
@@ -386,8 +491,6 @@ where
             left: Some(left_node),
             right: Some(right_node),
         };
-
-        // println!("BOTTOM: depth: {}, node {:?}", depth, node);
     }
 
     fn calculate_leaf_prediction(&self, indices: &Array1<usize>) -> Option<usize> {
@@ -472,7 +575,7 @@ where
     fn calculate_entropy(class_counts: &HashMap<usize, usize>) -> f64 {
         let subset_size = class_counts.values().sum::<usize>() as f64;
         let entropy = class_counts
-            .into_iter()
+            .iter()
             .map(|(_, &count)| {
                 if count == 0_usize {
                     0 as f64
@@ -566,7 +669,7 @@ mod tests {
 
     use crate::classical_ml::{
         Algorithm,
-        algorithms::{LinearRegression, LogisticRegression},
+        algorithms::{LinearRegression, LogisticRegression, RandomForest},
         losses::{CrossEntropy, MSE},
     };
 
@@ -680,6 +783,54 @@ mod tests {
 
         let mut model = DecisionTreeClassifier::new(10, 1e-6, MSE);
         model.fit(&x_train, &y_train, 0.1, 100);
+
+        let predictions = model.predict(&x_test);
+
+        // Calculate and print the accuracy
+        let correct_predictions = predictions
+            .iter()
+            .zip(y_test.iter())
+            .filter(|(&pred, &actual)| (pred - actual).abs() < 1e-6)
+            .count();
+        let accuracy = correct_predictions as f64 / y_test.len() as f64;
+        println!("Test accuracy: {:.2}%", accuracy * 100.0);
+    }
+
+    #[test]
+    fn test_random_forest_fit_and_predict() {
+        let (train, test) = linfa_datasets::iris().split_with_ratio(0.8);
+
+        // Convert train data to ndarray format
+        let x_train = Array2::from_shape_vec(
+            (train.records().nrows(), train.records().ncols()),
+            train.records().to_owned().into_raw_vec(),
+        )
+        .unwrap();
+
+        let y_train = Array1::from_shape_vec(
+            train.targets().len(),
+            train.targets().iter().map(|&x| x as f64).collect(),
+        )
+        .unwrap();
+
+        // Convert test data to ndarray format
+        let x_test = Array2::from_shape_vec(
+            (test.records().nrows(), test.records().ncols()),
+            test.records().to_owned().into_raw_vec(),
+        )
+        .unwrap();
+
+        let y_test = Array1::from_shape_vec(
+            test.targets().len(),
+            test.targets().iter().map(|&x| x as f64).collect(),
+        )
+        .unwrap();
+
+        let mut model = RandomForest::new(CrossEntropy);
+
+        println!("Fitting the model...");
+        model.fit(&x_train, &y_train, 0.1, 100);
+        println!("Model fitted.");
 
         let predictions = model.predict(&x_test);
 
