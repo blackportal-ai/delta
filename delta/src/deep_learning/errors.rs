@@ -98,6 +98,21 @@ pub enum LayerError {
     OptimizerError(OptimizerError),
 }
 
+/// Errors that can occur during gradient projection
+#[derive(Debug)]
+pub enum ProjectionError {
+    /// Error when projection type is invalid or not implemented
+    InvalidProjectionType(String),
+    /// Error when orthogonal matrix is not initialized
+    UninitializedMatrix,
+    /// Error when shapes are incompatible for projection
+    IncompatibleShape(String),
+    /// Error when device mismatch occurs
+    DeviceMismatch(String),
+    /// Error when rank is invalid
+    InvalidRank(String),
+}
+
 impl fmt::Display for OptimizerError {
     /// Formats the `OptimizerError` for display purposes.
     ///
@@ -161,6 +176,23 @@ impl fmt::Display for LayerError {
     }
 }
 
+impl fmt::Display for ProjectionError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ProjectionError::InvalidProjectionType(s) => {
+                write!(f, "Invalid projection type: {}", s)
+            }
+            ProjectionError::UninitializedMatrix => {
+                write!(f, "Orthogonal matrix must be initialized")
+            }
+            ProjectionError::IncompatibleShape(s) => write!(f, "Incompatible shapes: {}", s),
+            ProjectionError::DeviceMismatch(s) => write!(f, "Device mismatch: {}", s),
+            ProjectionError::InvalidRank(s) => write!(f, "Invalid rank: {}", s),
+        }
+    }
+}
+
 impl std::error::Error for LayerError {}
 impl std::error::Error for OptimizerError {}
 impl std::error::Error for ModelError {}
+impl std::error::Error for ProjectionError {}
