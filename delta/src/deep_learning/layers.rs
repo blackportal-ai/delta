@@ -28,7 +28,7 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use log::debug;
-use ndarray::{Dimension, IxDyn, Shape};
+use ndarray::{ArrayD, Dimension, IxDyn, Shape, s};
 use serde_json;
 
 use crate::devices::Device;
@@ -500,6 +500,324 @@ impl Layer for Flatten {
     }
 }
 
+#[derive(Debug)]
+pub struct Conv2D {
+    name: String,
+    filters: usize,
+    kernel_size: (usize, usize),
+    strides: (usize, usize),
+    padding: (usize, usize),
+    weights: Option<Tensor>,
+    bias: Option<Tensor>,
+    weights_grad: Option<Tensor>,
+    bias_grad: Option<Tensor>,
+    input: Option<Tensor>,
+    device: Device,
+    trainable: bool,
+}
+
+impl Conv2D {
+    pub fn new(
+        filters: usize,
+        kernel_size: (usize, usize),
+        strides: (usize, usize),
+        padding: (usize, usize),
+        trainable: bool,
+    ) -> Self {
+        Self {
+            name: format!("conv2d_{}x{}", kernel_size.0, kernel_size.1),
+            filters,
+            kernel_size,
+            strides,
+            padding,
+            weights: None,
+            bias: None,
+            weights_grad: None,
+            bias_grad: None,
+            input: None,
+            device: Device::default(),
+            trainable,
+        }
+    }
+
+    fn im2col(
+        input: &Tensor,
+        kernel_size: (usize, usize),
+        strides: (usize, usize),
+        padding: (usize, usize),
+    ) -> Tensor {
+        let binding = input.shape();
+        let input_shape = binding.raw_dim();
+        let (batch_size, in_channels, in_height, in_width) =
+            (input_shape[0], input_shape[1], input_shape[2], input_shape[3]);
+        let (kernel_height, kernel_width) = kernel_size;
+        let (stride_height, stride_width) = strides;
+        let (pad_height, pad_width) = padding;
+
+        let out_height = (in_height + 2 * pad_height - kernel_height) / stride_height + 1;
+        let out_width = (in_width + 2 * pad_width - kernel_width) / stride_width + 1;
+
+        let shape =
+            IxDyn(&[batch_size, out_height, out_width, in_channels, kernel_height, kernel_width]);
+
+        let mut cols = ArrayD::zeros(shape);
+
+        for b in 0..batch_size {
+            for c in 0..in_channels {
+                for h in 0..out_height {
+                    for w in 0..out_width {
+                        for kh in 0..kernel_height {
+                            for kw in 0..kernel_width {
+                                // Compute indices with padding
+                                let ih = (h * stride_height + kh) as isize - pad_height as isize;
+                                let iw = (w * stride_width + kw) as isize - pad_width as isize;
+
+                                // Check if the indices are within bounds
+                                if ih >= 0
+                                    && ih < in_height as isize
+                                    && iw >= 0
+                                    && iw < in_width as isize
+                                {
+                                    // Safe to cast to usize and access the input
+                                    cols[[b, h, w, c, kh, kw]] =
+                                        input.data[[b, c, ih as usize, iw as usize]];
+                                } else {
+                                    // Handle out-of-bounds indices (e.g., zero-padding)
+                                    cols[[b, h, w, c, kh, kw]] = 0.0;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Tensor { data: cols.into_dyn(), device: input.device.clone() }
+    }
+}
+
+impl Layer for Conv2D {
+    fn build(&mut self, input_shape: Shape<IxDyn>) -> Result<(), LayerError> {
+        let input_dims = input_shape.raw_dim();
+        let in_channels = input_dims[1];
+
+        let weight_shape = Shape::from(IxDyn(&[
+            self.filters,
+            in_channels,
+            self.kernel_size.0,
+            self.kernel_size.1,
+        ]));
+
+        self.weights = Some(Tensor::random_normal(weight_shape, 0.0, 0.01));
+        self.bias = Some(Tensor::zeros(Shape::from(IxDyn(&[self.filters])), self.device.clone()));
+
+        Ok(())
+    }
+
+    fn forward(&mut self, input: &Tensor) -> Result<Tensor, LayerError> {
+        let weights = self.weights.as_ref().ok_or(LayerError::UninitializedWeights)?;
+        let bias = self.bias.as_ref().ok_or(LayerError::UninitializedBias)?;
+
+        self.input = Some(input.clone());
+
+        let cols = Self::im2col(input, self.kernel_size, self.strides, self.padding);
+        let reshaped_cols = cols.reshape(IxDyn(&[
+            cols.shape().raw_dim()[0] * cols.shape().raw_dim()[1] * cols.shape().raw_dim()[2],
+            cols.shape().raw_dim()[3] * cols.shape().raw_dim()[4] * cols.shape().raw_dim()[5],
+        ]));
+
+        let reshaped_weights = weights.reshape(IxDyn(&[
+            self.filters,
+            weights.shape().raw_dim()[1]
+                * weights.shape().raw_dim()[2]
+                * weights.shape().raw_dim()[3],
+        ]));
+
+        let output = reshaped_cols.dot(&reshaped_weights.transpose());
+
+        // reshape output to match the expected output dimensions
+        let output_shape = self.output_shape()?;
+        let output = output.reshape(output_shape.raw_dim().clone());
+
+        // reshape bias to match output dimensions
+        let reshaped_bias = bias.reshape(IxDyn(&[1, self.filters, 1, 1]));
+        let output = output.add(&reshaped_bias);
+
+        Ok(output)
+    }
+
+    fn backward(&mut self, grad: &Tensor) -> Result<Tensor, LayerError> {
+        let weights = self.weights.as_ref().ok_or(LayerError::UninitializedWeights)?;
+        let input = self.input.as_ref().ok_or(LayerError::UninitializedInput)?;
+
+        let input_shape = input.data.shape();
+        if input_shape.len() != 4 {
+            return Err(LayerError::InvalidInputShape);
+        }
+        let batch_size = input_shape[0];
+        let in_channels = input_shape[1];
+        let in_height = input_shape[2];
+        let in_width = input_shape[3];
+
+        // Compute output dimensions (as in the forward pass).
+        let output_height =
+            (in_height + 2 * self.padding.0 - self.kernel_size.0) / self.strides.0 + 1;
+        let output_width =
+            (in_width + 2 * self.padding.1 - self.kernel_size.1) / self.strides.1 + 1;
+
+        // Initialize gradient tensors with the appropriate shapes.
+        let mut weights_grad = Tensor::zeros(
+            Shape::from(IxDyn(&[
+                self.filters,
+                in_channels,
+                self.kernel_size.0,
+                self.kernel_size.1,
+            ])),
+            self.device.clone(),
+        );
+        let mut bias_grad = Tensor::zeros(Shape::from(IxDyn(&[self.filters])), self.device.clone());
+        let mut input_grad = Tensor::zeros(
+            Shape::from(IxDyn(&[batch_size, in_channels, in_height, in_width])),
+            self.device.clone(),
+        );
+
+        // Loop over each example in the batch.
+        for b in 0..batch_size {
+            // Loop over each filter.
+            for f in 0..self.filters {
+                // Loop over each spatial location in the output.
+                for i in 0..output_height {
+                    for j in 0..output_width {
+                        // grad[b, f, i, j] is the scalar gradient from the next layer.
+                        let grad_val = grad.data[[b, f, i, j]];
+                        // Update bias gradient.
+                        bias_grad.data[[f]] += grad_val;
+
+                        // For each kernel element, compute its corresponding input index.
+                        for kh in 0..self.kernel_size.0 {
+                            for kw in 0..self.kernel_size.1 {
+                                // Compute the "raw" input indices (without padding) for this output location.
+                                let ih = i * self.strides.0 + kh;
+                                let iw = j * self.strides.1 + kw;
+                                // Adjust for padding.
+                                let ih_padded = ih as isize - self.padding.0 as isize;
+                                let iw_padded = iw as isize - self.padding.1 as isize;
+
+                                // Only update if the indices fall within the actual input dimensions.
+                                if ih_padded >= 0
+                                    && ih_padded < in_height as isize
+                                    && iw_padded >= 0
+                                    && iw_padded < in_width as isize
+                                {
+                                    let ih_idx = ih_padded as usize;
+                                    let iw_idx = iw_padded as usize;
+
+                                    // For each channel, update the corresponding gradients.
+                                    for c in 0..in_channels {
+                                        // Weight gradient for filter f: add input[b, c, ih_idx, iw_idx] * grad_val.
+                                        weights_grad.data[[f, c, kh, kw]] +=
+                                            input.data[[b, c, ih_idx, iw_idx]] * grad_val;
+                                        // Input gradient: add contribution from filter f weighted by the filter weight.
+                                        input_grad.data[[b, c, ih_idx, iw_idx]] +=
+                                            weights.data[[f, c, kh, kw]] * grad_val;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if self.trainable {
+            self.weights_grad = Some(weights_grad);
+            self.bias_grad = Some(bias_grad);
+        }
+
+        Ok(input_grad)
+    }
+
+    fn output_shape(&self) -> Result<Shape<IxDyn>, LayerError> {
+        let binding = self.input.as_ref().ok_or(LayerError::UninitializedInput)?.shape();
+        let input_shape = binding.raw_dim();
+
+        let (in_height, in_width) = (input_shape[2], input_shape[3]);
+        let (out_height, out_width) = (
+            (in_height + 2 * self.padding.0 - self.kernel_size.0) / self.strides.0 + 1,
+            (in_width + 2 * self.padding.1 - self.kernel_size.1) / self.strides.1 + 1,
+        );
+
+        println!("Input shape: {:?}", input_shape);
+
+        // Return the output shape as `[batch_size, filters, out_height, out_width]`
+        Ok(Shape::from(IxDyn(&[input_shape[0], self.filters, out_height, out_width])))
+    }
+
+    fn param_count(&self) -> Result<(usize, usize), LayerError> {
+        let weights_count = self.weights.as_ref().map_or(0, |w| w.data.len());
+        let bias_count = self.bias.as_ref().map_or(0, |b| b.data.len());
+        Ok((weights_count, bias_count))
+    }
+
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn set_device(&mut self, device: &Device) {
+        self.device = device.clone();
+
+        if let Some(ref mut weights) = self.weights {
+            weights.device = device.clone();
+        }
+        if let Some(ref mut bias) = self.bias {
+            bias.device = device.clone();
+        }
+        if let Some(ref mut input) = self.input {
+            input.device = device.clone();
+        }
+    }
+
+    fn update_weights(&mut self, optimizer: &mut Box<dyn Optimizer>) -> Result<(), LayerError> {
+        if !self.trainable {
+            return Ok(());
+        }
+
+        if let Some(ref weights_grad) = self.weights_grad {
+            optimizer
+                .step(self.weights.as_mut().unwrap(), weights_grad)
+                .map_err(LayerError::OptimizerError)?;
+        }
+
+        if let Some(ref bias_grad) = self.bias_grad {
+            optimizer
+                .step(self.bias.as_mut().unwrap(), bias_grad)
+                .map_err(LayerError::OptimizerError)?;
+        }
+
+        self.weights_grad = None;
+        self.bias_grad = None;
+
+        Ok(())
+    }
+
+    fn get_weights(&self) -> serde_json::Value {
+        serde_json::json!({
+            "weights": self.weights.as_ref().map(|w| w.to_vec()),
+            "bias": self.bias.as_ref().map(|b| b.to_vec())
+        })
+    }
+
+    fn get_config(&self) -> serde_json::Value {
+        serde_json::json!({
+            "filters": self.filters,
+            "kernel_size": [self.kernel_size.0, self.kernel_size.1],
+            "strides": [self.strides.0, self.strides.1],
+            "padding": [self.padding.0, self.padding.1],
+            "trainable": self.trainable,
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::deep_learning::activations::ReluActivation;
@@ -568,9 +886,10 @@ mod tests {
     #[test]
     fn test_dense_layer_output_shape() {
         let dense_layer = Dense::new(10, Some(ReluActivation::new()), true);
-        assert_eq!(dense_layer.output_shape().unwrap().raw_dim().as_array_view().to_vec(), vec![
-            10
-        ]);
+        assert_eq!(
+            dense_layer.output_shape().unwrap().raw_dim().as_array_view().to_vec(),
+            vec![10]
+        );
     }
 
     #[test]
@@ -650,5 +969,53 @@ mod tests {
 
         assert_eq!(trainable, 0);
         assert_eq!(non_trainable, 0);
+    }
+
+    #[test]
+    fn test_conv2d_forward_pass() {
+        let input = Tensor::random(Shape::from(IxDyn(&[1, 3, 32, 32])));
+        let mut conv_layer = Conv2D::new(16, (3, 3), (1, 1), (1, 1), true);
+        conv_layer.build(Shape::from(IxDyn(&[1, 3, 32, 32]))).expect("Failed to build layer");
+
+        let output = conv_layer.forward(&input).unwrap();
+
+        assert_eq!(output.shape().raw_dim().as_array_view().to_vec(), vec![1, 16, 32, 32]);
+    }
+
+    #[test]
+    fn test_conv2d_backward_pass() {
+        let input = Tensor::random(Shape::from(IxDyn(&[1, 3, 32, 32])));
+        let mut conv_layer = Conv2D::new(16, (3, 3), (1, 1), (1, 1), true);
+        conv_layer.build(Shape::from(IxDyn(&[1, 3, 32, 32]))).expect("Failed to build layer");
+
+        let output = conv_layer.forward(&input).unwrap();
+        let grad = Tensor::random(output.shape());
+        let input_grad = conv_layer.backward(&grad).unwrap();
+
+        // Verify the input gradient shape matches the input shape
+        assert_eq!(input_grad.shape().raw_dim().as_array_view().to_vec(), vec![1, 3, 32, 32]);
+    }
+
+    #[test]
+    fn test_conv2d_output_shape() {
+        let mut conv_layer = Conv2D::new(16, (3, 3), (1, 1), (1, 1), true);
+        let input_shape = Shape::from(IxDyn(&[1, 3, 32, 32]));
+        conv_layer.build(input_shape.clone()).expect("Failed to build layer");
+
+        // initialize the layer with the input shape
+        conv_layer.input = Some(Tensor::random(input_shape));
+
+        let output_shape = conv_layer.output_shape().unwrap();
+        assert_eq!(output_shape.raw_dim().as_array_view().to_vec(), vec![1, 16, 32, 32]);
+    }
+
+    #[test]
+    fn test_conv2d_param_count() {
+        let mut conv_layer = Conv2D::new(16, (3, 3), (1, 1), (1, 1), true);
+        conv_layer.build(Shape::from(IxDyn(&[1, 3, 32, 32]))).expect("Failed to build layer");
+
+        let (weights_count, bias_count) = conv_layer.param_count().unwrap();
+        assert_eq!(weights_count, 16 * 3 * 3 * 3);
+        assert_eq!(bias_count, 16);
     }
 }
