@@ -836,10 +836,6 @@ impl Tensor {
         }
     }
 
-    pub fn sum(&self) -> f32 {
-        self.data.iter().copied().sum()
-    }
-
     /// Transfers the tensor to the specified device.
     ///
     /// # Arguments
