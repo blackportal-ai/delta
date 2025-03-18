@@ -1,9 +1,8 @@
 use deltaml::{
     deep_learning::{
         activations::{ReluActivation, SoftmaxActivation},
-        conv2d_layer::Conv2D,
         dataset::{DatasetOps, MnistDataset},
-        layers::{Dense, Flatten},
+        layers::{Conv2D, Dense, Flatten},
         losses::SparseCategoricalCrossEntropyLoss,
         models::Sequential,
         optimizers::Adam,
