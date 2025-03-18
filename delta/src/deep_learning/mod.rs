@@ -28,6 +28,7 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 pub mod activations;
+pub mod conv2d_layer;
 pub mod dataset;
 pub mod encoders;
 pub mod errors;
