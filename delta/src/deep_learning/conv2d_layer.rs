@@ -27,11 +27,14 @@
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use ndarray::{IxDyn, Shape};
+use ndarray::{Dimension, IxDyn, Shape};
 
 use crate::devices::Device;
 
-use super::{errors::LayerError, layers::Layer, optimizers::Optimizer, tensor_ops::Tensor};
+use super::{
+    activations::Activation, errors::LayerError, layers::Layer, optimizers::Optimizer,
+    tensor_ops::Tensor,
+};
 
 #[derive(Debug)]
 pub struct Conv2D {
@@ -40,6 +43,7 @@ pub struct Conv2D {
     stride: usize,
     padding: usize,
     device: Device,
+    activation: Option<Box<dyn Activation>>,
     weights: Option<Tensor>,
     bias: Option<Tensor>,
     input: Option<Tensor>,
@@ -50,13 +54,13 @@ pub struct Conv2D {
 }
 
 impl Conv2D {
-    fn new(
+    pub fn new<A: Activation + 'static>(
         filters: usize,
         kernel_size: usize,
         stride: usize,
         padding: usize,
         input_shape: Shape<IxDyn>,
-        device: Device,
+        activation: Option<A>,
         trainable: bool,
     ) -> Self {
         Conv2D {
@@ -65,7 +69,8 @@ impl Conv2D {
             stride,
             padding,
             input_shape,
-            device: device.clone(),
+            activation: activation.map(|a| Box::new(a) as Box<dyn Activation>),
+            device: Device::default(),
             weights: None,
             bias: None,
             input: None,
@@ -85,7 +90,7 @@ impl Layer for Conv2D {
     fn build(&mut self, input_shape: Shape<IxDyn>) -> Result<(), LayerError> {
         self.weights = Some(Tensor::random(Shape::from(IxDyn(&[
             self.filters,
-            input_shape.raw_dim()[3],
+            input_shape.raw_dim()[input_shape.raw_dim().to_owned().as_array_view().len() - 1],
             self.kernel_size,
             self.kernel_size,
         ]))));
@@ -152,6 +157,12 @@ impl Layer for Conv2D {
                 }
             }
         }
+
+        let output = if let Some(ref activation) = self.activation {
+            activation.activate(&output)
+        } else {
+            output
+        };
 
         Ok(output)
     }
@@ -235,7 +246,9 @@ impl Layer for Conv2D {
     ///
     /// A `Shape` representing the output shape of the layer.
     fn output_shape(&self) -> Result<Shape<IxDyn>, LayerError> {
+        println!("Shape of Conv2D Layer: {:?}", self.input_shape);
         let input_shape = self.input_shape.raw_dim();
+        println!("Shape of Conv2D Layer DIM: {:?}", input_shape.as_array_view().to_vec());
         let output_height =
             (input_shape[1] + 2 * self.padding - self.kernel_size) / self.stride + 1;
         let output_width = (input_shape[2] + 2 * self.padding - self.kernel_size) / self.stride + 1;
@@ -342,6 +355,8 @@ impl Layer for Conv2D {
 mod tests {
     use ndarray::Dimension;
 
+    use crate::deep_learning::activations::ReluActivation;
+
     use super::*;
     #[test]
     fn test_conv2d_forward_pass() {
@@ -349,13 +364,13 @@ mod tests {
         let input =
             Tensor::new(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0], input_shape.clone());
         let mut conv2d_layer = Conv2D::new(
-            1,                   // filters
-            2,                   // kernel_size
-            1,                   // stride
-            0,                   // padding
-            input_shape.clone(), // input_shape
-            Device::Cpu,         // device
-            true,                // trainable
+            1,                           // filters
+            2,                           // kernel_size
+            1,                           // stride
+            0,                           // padding
+            input_shape.clone(),         // input_shape
+            Some(ReluActivation::new()), // activation
+            true,                        // trainable
         );
         let _ = conv2d_layer.build(input_shape).unwrap();
 
@@ -371,13 +386,13 @@ mod tests {
         let input =
             Tensor::new(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0], input_shape.clone());
         let mut conv2d_layer = Conv2D::new(
-            1,                   // filters / channels
-            2,                   // kernel_size
-            1,                   // stride
-            0,                   // padding
-            input_shape.clone(), // input_shape
-            Device::Cpu,         // device
-            true,                // trainable
+            1,                           // filters
+            2,                           // kernel_size
+            1,                           // stride
+            0,                           // padding
+            input_shape.clone(),         // input_shape
+            Some(ReluActivation::new()), // activation
+            true,                        // trainable
         );
         let _ = conv2d_layer.build(input_shape).unwrap();
 
@@ -396,13 +411,13 @@ mod tests {
         let input =
             Tensor::new(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0], input_shape.clone());
         let mut conv2d_layer = Conv2D::new(
-            1,                   // filters
-            2,                   // kernel_size
-            1,                   // stride
-            0,                   // padding
-            input_shape.clone(), // input_shape
-            Device::Cpu,         // device
-            true,                // trainable
+            1,                           // filters
+            2,                           // kernel_size
+            1,                           // stride
+            0,                           // padding
+            input_shape.clone(),         // input_shape
+            Some(ReluActivation::new()), // activation
+            true,                        // trainable
         );
         let _ = conv2d_layer.build(input_shape).unwrap();
 
@@ -422,13 +437,13 @@ mod tests {
         let input =
             Tensor::new(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0], input_shape.clone());
         let mut conv2d_layer = Conv2D::new(
-            1,                   // filters
-            2,                   // kernel_size
-            1,                   // stride
-            0,                   // padding
-            input_shape.clone(), // input_shape
-            Device::Cpu,         // device
-            true,                // trainable
+            1,                           // filters
+            2,                           // kernel_size
+            1,                           // stride
+            0,                           // padding
+            input_shape.clone(),         // input_shape
+            Some(ReluActivation::new()), // activation
+            true,                        // trainable
         );
         let _ = conv2d_layer.build(input_shape).unwrap();
 
