@@ -2,7 +2,7 @@ use ndarray::{IxDyn, Shape};
 
 use crate::devices::Device;
 
-use super::{errors::LayerError, layers::Layer, tensor_ops::Tensor};
+use super::{errors::LayerError, layers::Layer, optimizers::Optimizer, tensor_ops::Tensor};
 
 #[derive(Debug)]
 pub struct Conv2D {
@@ -48,7 +48,7 @@ impl Conv2D {
 }
 
 impl Layer for Conv2D {
-    fn build(&mut self, input_shape: Shape<IxDyn>) -> Result<(), super::errors::LayerError> {
+    fn build(&mut self, input_shape: Shape<IxDyn>) -> Result<(), LayerError> {
         self.weights = Some(Tensor::random(Shape::from(IxDyn(&[
             self.filters,
             input_shape.raw_dim()[3],
@@ -113,7 +113,7 @@ impl Layer for Conv2D {
         Ok(output)
     }
 
-    fn backward(&mut self, grad: &Tensor) -> Result<Tensor, super::errors::LayerError> {
+    fn backward(&mut self, grad: &Tensor) -> Result<Tensor, LayerError> {
         let padded_input = self.input.as_ref().expect("Input must be initialized.");
         let padded_input = padded_input
             .clone()
@@ -177,11 +177,21 @@ impl Layer for Conv2D {
         Ok(d_input)
     }
 
-    fn output_shape(&self) -> Result<Shape<IxDyn>, super::errors::LayerError> {
-        todo!()
+    fn output_shape(&self) -> Result<Shape<IxDyn>, LayerError> {
+        let input_shape = self.input_shape.raw_dim();
+        let output_height =
+            (input_shape[1] + 2 * self.padding - self.kernel_size) / self.stride + 1;
+        let output_width = (input_shape[2] + 2 * self.padding - self.kernel_size) / self.stride + 1;
+
+        Ok(Shape::from(IxDyn(&[
+            input_shape[0], // batch size
+            output_height,  // height
+            output_width,   // width
+            self.filters,   // channels
+        ])))
     }
 
-    fn param_count(&self) -> Result<(usize, usize), super::errors::LayerError> {
+    fn param_count(&self) -> Result<(usize, usize), LayerError> {
         let weights_count = self.weights.as_ref().map_or(0, |w| w.data.len());
         let bias_count = self.bias.as_ref().map_or(0, |b| b.data.len());
         Ok((weights_count, bias_count))
@@ -195,10 +205,7 @@ impl Layer for Conv2D {
         self.device = device.clone();
     }
 
-    fn update_weights(
-        &mut self,
-        optimizer: &mut Box<dyn super::optimizers::Optimizer>,
-    ) -> Result<(), super::errors::LayerError> {
+    fn update_weights(&mut self, optimizer: &mut Box<dyn Optimizer>) -> Result<(), LayerError> {
         if !self.trainable {
             return Ok(());
         }
@@ -257,7 +264,7 @@ mod tests {
         let input =
             Tensor::new(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0], input_shape.clone());
         let mut conv2d_layer = Conv2D::new(
-            1,                   // filters
+            1,                   // filters / channels
             2,                   // kernel_size
             1,                   // stride
             0,                   // padding
