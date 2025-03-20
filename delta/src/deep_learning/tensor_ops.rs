@@ -28,7 +28,7 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use std::io::Cursor;
-use std::ops::{AddAssign, Mul, Range, SubAssign};
+use std::ops::{AddAssign, Index, IndexMut, Mul, Range, SubAssign};
 
 use image::{GenericImageView, ImageReader};
 use ndarray::{Array, ArrayD, Axis, Dimension, Ix2, IxDyn, Shape};
@@ -766,10 +766,10 @@ impl Tensor {
         let data1 = self.data.slice_each_axis(|ax| slice1[ax.axis.0]).to_owned().into_dyn();
         let data2 = self.data.slice_each_axis(|ax| slice2[ax.axis.0]).to_owned().into_dyn();
 
-        (Tensor { data: data1, device: self.device.clone() }, Tensor {
-            data: data2,
-            device: self.device.clone(),
-        })
+        (
+            Tensor { data: data1, device: self.device.clone() },
+            Tensor { data: data2, device: self.device.clone() },
+        )
     }
 
     /// Creates a tensor filled with random values sampled from a normal distribution.
@@ -848,6 +848,69 @@ impl Tensor {
     pub fn to_device(&mut self, device: Device) -> Result<Self, String> {
         self.device = device.clone();
         Ok(self.clone())
+    }
+
+    /// Pads the tensor with zeros on all sides by creating a new tensor with all zeros
+    /// and filling the center with the original tensor data.
+    ///
+    /// # Arguments
+    /// * `padding` - The number of zeros to add to each side of the tensor.
+    ///
+    /// # Returns
+    /// * A new tensor with the specified padding.
+    pub fn pad(&mut self, padding: usize) -> Result<Self, String> {
+        if padding == 0 {
+            return Ok(self.clone());
+        }
+
+        let input_shape = self.shape();
+        let input_shape = input_shape.raw_dim();
+        let batch_size = input_shape[0];
+        let height = input_shape[1];
+        let width = input_shape[2];
+        let channels = input_shape[3];
+
+        let padded_width = width + 2 * padding;
+        let padded_height = width + 2 * padding;
+
+        let mut padded_tensor = Tensor::zeros(
+            Shape::from(IxDyn(&[batch_size, padded_height, padded_width, channels])),
+            self.device.clone(),
+        );
+
+        for b in 0..batch_size {
+            for h in 0..height {
+                for w in 0..width {
+                    for c in 0..channels {
+                        padded_tensor[(b, h + padding, w + padding, c)] = self[(b, h, w, c)];
+                    }
+                }
+            }
+        }
+
+        Ok(padded_tensor)
+    }
+}
+
+impl Index<(usize, usize, usize, usize)> for Tensor {
+    type Output = f32;
+    fn index(&self, index: (usize, usize, usize, usize)) -> &Self::Output {
+        let flat = self.data.as_slice().expect("Tensor data must be contiguous");
+        let (b, i, j, f) = index;
+        let dims = self.data.shape();
+        let flat_index = b * dims[1] * dims[2] * dims[3] + i * dims[2] * dims[3] + j * dims[3] + f;
+        &flat[flat_index]
+    }
+}
+
+impl IndexMut<(usize, usize, usize, usize)> for Tensor {
+    fn index_mut(&mut self, index: (usize, usize, usize, usize)) -> &mut Self::Output {
+        // Copy the shape into an owned vector so we no longer hold an immutable borrow
+        let dims: Vec<usize> = self.data.shape().to_vec();
+        let flat = self.data.as_slice_mut().expect("Tensor data must be contiguous");
+        let (b, i, j, f) = index;
+        let flat_index = b * dims[1] * dims[2] * dims[3] + i * dims[2] * dims[3] + j * dims[3] + f;
+        &mut flat[flat_index]
     }
 }
 
