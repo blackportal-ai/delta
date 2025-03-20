@@ -29,6 +29,8 @@
 
 use std::collections::HashMap;
 use std::fmt::Debug;
+use std::hash::Hash;
+use std::ops::AddAssign;
 use std::{collections::HashSet, ops::SubAssign};
 
 use libm::log2;
@@ -266,6 +268,148 @@ where
     fn predict(&self, x: &Array2<T>) -> Array1<T> {
         let linear_output = self.predict_linear(x);
         self.sigmoid(linear_output)
+    }
+}
+
+/// A struct for performing K-Nearest Neighbors classification.
+///
+/// This implementation uses the Euclidean distance metric to find the `k` nearest neighbors
+pub struct KNearestNeighbors<T, L>
+where
+    T: Float,
+    L: Loss<T>,
+{
+    k: usize,
+    x_train: Option<Array2<T>>,
+    y_train: Option<Array1<T>>,
+    loss_function: L,
+}
+
+impl<T, L> KNearestNeighbors<T, L>
+where
+    T: Float + FromPrimitive + AddAssign,
+    L: Loss<T>,
+{
+    /// Creates a new `KNearestNeighbors` instance.
+    ///
+    /// # Arguments
+    /// - `k`: The number of neighbors to consider.
+    /// - `loss_function`: The loss function to use.
+    ///
+    /// # Returns
+    /// A new instance of `KNearestNeighbors`.
+    pub fn new(k: usize, loss_function: L) -> Self {
+        KNearestNeighbors { k, x_train: None, y_train: None, loss_function }
+    }
+
+    /// Calculates the loss between predictions and actual values.
+    ///
+    /// # Arguments
+    /// - `predictions`: Predicted values as a 1D array.
+    /// - `actuals`: Actual values as a 1D array.
+    ///
+    /// # Returns
+    /// The calculated loss as a value of type `T`.
+    pub fn calculate_loss(&self, predictions: &Array1<T>, actuals: &Array1<T>) -> T {
+        self.loss_function.calculate(predictions, actuals)
+    }
+
+    /// Calculates the Euclidean distance of elements between a provided sample, `x`, and
+    /// the training data.
+    ///
+    /// # Arguments
+    /// - `x`: A 2D array of input features (`Array2<T>`), where each row represents a sample.
+    ///
+    /// # Returns
+    /// A 2D array (`Array2<T>`) of distances between the provided sample and the training data.
+    pub fn calculate_distances(&self, x: &Array2<T>) -> Array2<T> {
+        let x_train = self.x_train.as_ref().unwrap();
+        let n_samples = x_train.shape()[0];
+        let n_features = x_train.shape()[1];
+        let n_test_samples = x.shape()[0];
+
+        let mut distances = Array2::zeros((n_test_samples, n_samples));
+
+        for i in 0..n_test_samples {
+            for j in 0..n_samples {
+                let mut dist = T::zero();
+                for k in 0..n_features {
+                    dist += (x[[i, k]] - x_train[[j, k]]).powi(2);
+                }
+                distances[[i, j]] = dist.sqrt();
+            }
+        }
+        distances
+    }
+}
+
+impl<T, L> Algorithm<T, L> for KNearestNeighbors<T, L>
+where
+    T: Debug + Float + FromPrimitive + AddAssign,
+    L: Loss<T>,
+{
+    /// Creates a new RandomForest instance.
+    fn new(loss_function: L) -> Self {
+        KNearestNeighbors { k: 3, x_train: None, y_train: None, loss_function }
+    }
+
+    /// Fits the logistic regression model to the training data using gradient descent.
+    ///
+    /// This function trains the model by iteratively updating the weights and bias to minimize
+    /// the loss function. It performs a specified number of epochs of gradient descent with
+    /// a given learning rate.
+    ///
+    /// # Parameters
+    /// - `x`: A 2D array of input features (`Array2<T>`), where each row represents a sample.
+    /// - `y`: A 1D array of target labels (`Array1<T>`) corresponding to the input samples.
+    /// - `_learning_rate`: (Not used) The learning rate used in gradient descent.
+    /// - `_epochs`: (Not used) The number of iterations (epochs) to run the gradient descent.
+    fn fit(&mut self, x: &Array2<T>, y: &Array1<T>, _learning_rate: T, _epochs: usize) {
+        self.x_train = Some(x.clone());
+        self.y_train = Some(y.clone());
+    }
+
+    /// Predicts the output of a K-Nearest Neighbors model.
+    ///
+    /// This function predicts the output for each sample in the input data by finding the `k` nearest
+    /// neighbors and using majority voting to determine the predicted class, with the nearest
+    /// distance being calculated via Euclidean distance.
+    ///
+    /// # Arguments
+    /// - `x`: A 2D array of input features (`Array2<T>`), where each row represents a sample.
+    ///
+    /// # Returns
+    /// A 1D array (`Array1<T>`) containing the predicted values for each sample.
+    fn predict(&self, x: &Array2<T>) -> Array1<T> {
+        let distances = self.calculate_distances(x);
+        let num_tests = x.shape()[0];
+        let mut y_pred = Array1::zeros(num_tests);
+
+        for i in 0..num_tests {
+            let mut indices: Vec<usize> = (0..self.x_train.as_ref().unwrap().shape()[0]).collect();
+            indices.sort_by(|&a, &b| {
+                distances[[i, a]]
+                    .partial_cmp(&distances[[i, b]])
+                    .expect("Failed to compare distances")
+            });
+
+            let mut k_nearest = Vec::with_capacity(self.k);
+            let k = self.k.min(indices.len());
+            for j in 0..k {
+                k_nearest.push(self.y_train.as_ref().unwrap()[indices[j]]);
+            }
+
+            let mut counts = vec![(T::zero(), 0); 10];
+            for &v in &k_nearest {
+                counts[v.to_usize().unwrap()].1 += 1;
+            }
+
+            let max = counts.iter().max_by_key(|&(_, count)| count).unwrap().0;
+
+            y_pred[i] = max;
+        }
+
+        y_pred
     }
 }
 
@@ -677,7 +821,7 @@ mod tests {
         losses::{CrossEntropy, MSE},
     };
 
-    use super::DecisionTreeClassifier;
+    use super::{DecisionTreeClassifier, KNearestNeighbors};
 
     #[test]
     fn test_linear_regression_fit_predict() {
@@ -850,5 +994,50 @@ mod tests {
 
         assert!(accuracy > 0.0, "Accuracy should be positive, got: {}", accuracy);
         assert!(loss < 0.0, "Loss should be less than 0, got: {}", loss);
+    }
+
+    #[test]
+    fn test_knn_fit_and_predict() {
+        let (train, test) = linfa_datasets::iris().split_with_ratio(0.8);
+
+        // Convert train data to ndarray format
+        let x_train = Array2::from_shape_vec(
+            (train.records().nrows(), train.records().ncols()),
+            train.records().to_owned().into_raw_vec(),
+        )
+        .unwrap();
+
+        let y_train = Array1::from_shape_vec(
+            train.targets().len(),
+            train.targets().iter().map(|&x| x as f64).collect(),
+        )
+        .unwrap();
+
+        // Convert test data to ndarray format
+        let y_test = Array1::from_shape_vec(
+            test.targets().len(),
+            test.targets().iter().map(|&x| x as f64).collect(),
+        )
+        .unwrap();
+
+        let mut model = KNearestNeighbors::new(5, CrossEntropy);
+
+        model.fit(&x_train, &y_train, 0.1, 100);
+
+        let predictions = model.predict(&x_train);
+
+        let correct_predictions = predictions
+            .iter()
+            .zip(y_train.iter())
+            .filter(|(&pred, &actual)| (pred - actual).abs() < 1e-6)
+            .count();
+
+        let accuracy = correct_predictions as f64 / y_test.len() as f64;
+        let loss = model.calculate_loss(&predictions, &y_test);
+
+        println!("Test accuracy: {:.2}%", accuracy * 100.0);
+        println!("Test loss: {:.2}", loss);
+
+        assert!(accuracy > 0.0, "Accuracy should be positive, got: {}", accuracy);
     }
 }
