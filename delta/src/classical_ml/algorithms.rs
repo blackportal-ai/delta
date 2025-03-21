@@ -30,13 +30,14 @@
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::hash::Hash;
-use std::ops::AddAssign;
+use std::ops::{Add, AddAssign, Mul, Sub};
 use std::{collections::HashSet, ops::SubAssign};
 
 use libm::log2;
 use ndarray::{Array1, Array2, Axis, ScalarOperand};
-use num_traits::{Float, FromPrimitive};
+use num_traits::{Float, FromPrimitive, sign};
 use rand::Rng;
+use rand_distr::uniform::SampleUniform;
 
 use super::{Algorithm, batch_gradient_descent, logistic_gradient_descent, losses::Loss};
 
@@ -271,6 +272,120 @@ where
     }
 }
 
+/// A struct for performing Support Vector Machines.
+pub struct SupportVectorMachines<T, L>
+where
+    T: Float,
+    L: Loss<T>,
+{
+    weights: Array1<T>,
+    bias: T,
+    x_train: Option<Array2<T>>,
+    y_train: Option<Array1<T>>,
+    loss_function: L,
+}
+
+impl<T, L> SupportVectorMachines<T, L>
+where
+    T: Float + FromPrimitive + Mul,
+    L: Loss<T>,
+{
+    /// Calculates the loss between predictions and actual values.
+    ///
+    /// # Arguments
+    /// - `predictions`: Predicted values as a 1D array.
+    /// - `actuals`: Actual values as a 1D array.
+    ///
+    /// # Returns
+    /// The calculated loss as a value of type `T`.
+    pub fn calculate_loss(&self, predictions: &Array1<T>, actuals: &Array1<T>) -> T {
+        self.loss_function.calculate(predictions, actuals)
+    }
+
+    // TODO: we should create generics for Activation
+    // /// Applies the sigmoid function to the given linear output.
+    ///
+    /// # Arguments
+    /// - `linear_output`: A 1D array of linear outputs.
+    ///
+    /// # Returns
+    /// A 1D array of sigmoid-transformed values.
+    fn sigmoid(&self, linear_output: Array1<T>) -> Array1<T> {
+        linear_output.mapv(|x| T::one() / (T::one() + (-x).exp()))
+    }
+}
+
+impl<T, L> Algorithm<T, L> for SupportVectorMachines<T, L>
+where
+    T: Float + ScalarOperand + SubAssign + Add + Mul + AddAssign + Sub,
+    L: Loss<T>,
+{
+    /// Creates a new SupportVectorMachines instance.
+    fn new(loss_function: L) -> Self {
+        SupportVectorMachines {
+            x_train: None,
+            y_train: None,
+            loss_function,
+            weights: Array1::zeros(1),
+            bias: T::zero(),
+        }
+    }
+
+    /// Fits the Support Vector Machines model to the training data.
+    ///
+    /// This function trains the model by iteratively updating the weights and bias to minimize
+    /// the loss function. It performs a specified number of epochs of gradient descent with
+    /// a given learning rate.
+    ///
+    /// # Parameters
+    /// - `x`: A 2D array of input features (`Array2<T>`), where each row represents a sample.
+    /// - `y`: A 1D array of target labels (`Array1<T>`) corresponding to the input samples.
+    /// - `_learning_rate`: The learning rate used in gradient descent.
+    /// - `_epochs`: The number of iterations (epochs) to run the gradient descent.
+    fn fit(&mut self, x: &Array2<T>, y: &Array1<T>, learning_rate: T, epochs: usize) {
+        self.x_train = Some(x.clone());
+        self.y_train = Some(y.clone());
+
+        self.weights = Array1::zeros(x.shape()[1]);
+
+        for _ in 0..epochs {
+            for (idx, _) in self.x_train.iter().enumerate() {
+                let y_val = self.y_train.as_ref().unwrap()[idx].clone();
+                let y_val = Array1::from_elem(1, y_val);
+                let x_val = x.row(idx).to_owned();
+
+                let weights_grad = if y_val[0] > T::zero() {
+                    self.weights.clone() * (T::from(2.0).unwrap())
+                } else {
+                    self.weights.clone() * (T::from(2.0).unwrap()) - (x_val * y_val.clone())
+                };
+
+                let bias_grad = if y_val[0] > T::zero() { T::zero() } else { y_val[0] };
+
+                self.weights -= &(weights_grad * learning_rate);
+                self.bias -= bias_grad * learning_rate;
+            }
+        }
+    }
+
+    /// Predicts the output of a Support Vector Machines model.
+    ///
+    /// This function predicts the output for each sample in the input data by finding the `k` nearest
+    /// neighbors and using majority voting to determine the predicted class, with the nearest
+    /// distance being calculated via Euclidean distance.
+    ///
+    /// # Arguments
+    /// - `x`: A 2D array of input features (`Array2<T>`), where each row represents a sample.
+    ///
+    /// # Returns
+    /// A 1D array (`Array1<T>`) containing the predicted values for each sample.
+    fn predict(&self, x: &Array2<T>) -> Array1<T> {
+        let y_hat = x.dot(&self.weights) + self.bias;
+
+        y_hat.mapv(|val| if val >= T::zero() { T::one() } else { T::zero() })
+    }
+}
+
 /// A struct for performing K-Nearest Neighbors classification.
 ///
 /// This implementation uses the Euclidean distance metric to find the `k` nearest neighbors
@@ -348,7 +463,7 @@ where
     T: Debug + Float + FromPrimitive + AddAssign,
     L: Loss<T>,
 {
-    /// Creates a new RandomForest instance.
+    /// Creates a new KNearestNeighbors instance.
     fn new(loss_function: L) -> Self {
         KNearestNeighbors { k: 3, x_train: None, y_train: None, loss_function }
     }
@@ -817,7 +932,7 @@ mod tests {
 
     use crate::classical_ml::{
         Algorithm,
-        algorithms::{LinearRegression, LogisticRegression, RandomForest},
+        algorithms::{LinearRegression, LogisticRegression, RandomForest, SupportVectorMachines},
         losses::{CrossEntropy, MSE},
     };
 
@@ -1023,6 +1138,51 @@ mod tests {
         let mut model = KNearestNeighbors::new(5, CrossEntropy);
 
         model.fit(&x_train, &y_train, 0.1, 100);
+
+        let predictions = model.predict(&x_train);
+
+        let correct_predictions = predictions
+            .iter()
+            .zip(y_train.iter())
+            .filter(|(&pred, &actual)| (pred - actual).abs() < 1e-6)
+            .count();
+
+        let accuracy = correct_predictions as f64 / y_test.len() as f64;
+        let loss = model.calculate_loss(&predictions, &y_test);
+
+        println!("Test accuracy: {:.2}%", accuracy * 100.0);
+        println!("Test loss: {:.2}", loss);
+
+        assert!(accuracy > 0.0, "Accuracy should be positive, got: {}", accuracy);
+    }
+
+    #[test]
+    fn test_svm_fit_and_predict() {
+        let (train, test) = linfa_datasets::iris().split_with_ratio(0.8);
+
+        // Convert train data to ndarray format
+        let x_train = Array2::from_shape_vec(
+            (train.records().nrows(), train.records().ncols()),
+            train.records().to_owned().into_raw_vec(),
+        )
+        .unwrap();
+
+        let y_train = Array1::from_shape_vec(
+            train.targets().len(),
+            train.targets().iter().map(|&x| x as f64).collect(),
+        )
+        .unwrap();
+
+        // Convert test data to ndarray format
+        let y_test = Array1::from_shape_vec(
+            test.targets().len(),
+            test.targets().iter().map(|&x| x as f64).collect(),
+        )
+        .unwrap();
+
+        let mut model = SupportVectorMachines::new(CrossEntropy);
+
+        model.fit(&x_train, &y_train, 0.1, 200);
 
         let predictions = model.predict(&x_train);
 
