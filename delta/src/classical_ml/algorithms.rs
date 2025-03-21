@@ -282,6 +282,7 @@ where
     bias: T,
     x_train: Option<Array2<T>>,
     y_train: Option<Array1<T>>,
+    lambda_parameter: T,
     loss_function: L,
 }
 
@@ -290,6 +291,24 @@ where
     T: Float + FromPrimitive + Mul,
     L: Loss<T>,
 {
+    /// Creates a new `SupportVectorMachines` instance.
+    ///
+    /// # Arguments
+    /// - `loss_function`: The loss function to use.
+    ///
+    /// # Returns
+    /// A new instance of `SupportVectorMachines`.
+    pub fn new(lambda_parameter: T, loss_function: L) -> Self {
+        SupportVectorMachines {
+            x_train: None,
+            y_train: None,
+            loss_function,
+            weights: Array1::zeros(1),
+            bias: T::zero(),
+            lambda_parameter,
+        }
+    }
+
     /// Calculates the loss between predictions and actual values.
     ///
     /// # Arguments
@@ -300,18 +319,6 @@ where
     /// The calculated loss as a value of type `T`.
     pub fn calculate_loss(&self, predictions: &Array1<T>, actuals: &Array1<T>) -> T {
         self.loss_function.calculate(predictions, actuals)
-    }
-
-    // TODO: we should create generics for Activation
-    // /// Applies the sigmoid function to the given linear output.
-    ///
-    /// # Arguments
-    /// - `linear_output`: A 1D array of linear outputs.
-    ///
-    /// # Returns
-    /// A 1D array of sigmoid-transformed values.
-    fn sigmoid(&self, linear_output: Array1<T>) -> Array1<T> {
-        linear_output.mapv(|x| T::one() / (T::one() + (-x).exp()))
     }
 }
 
@@ -328,6 +335,7 @@ where
             loss_function,
             weights: Array1::zeros(1),
             bias: T::zero(),
+            lambda_parameter: T::zero(),
         }
     }
 
@@ -355,9 +363,10 @@ where
                 let x_val = x.row(idx).to_owned();
 
                 let weights_grad = if y_val[0] > T::zero() {
-                    self.weights.clone() * (T::from(2.0).unwrap())
+                    self.weights.clone() * self.lambda_parameter * (T::from(2.0).unwrap())
                 } else {
-                    self.weights.clone() * (T::from(2.0).unwrap()) - (x_val * y_val.clone())
+                    self.weights.clone() * self.lambda_parameter * (T::from(2.0).unwrap())
+                        - (x_val * y_val.clone())
                 };
 
                 let bias_grad = if y_val[0] > T::zero() { T::zero() } else { y_val[0] };
@@ -1180,7 +1189,7 @@ mod tests {
         )
         .unwrap();
 
-        let mut model = SupportVectorMachines::new(CrossEntropy);
+        let mut model = SupportVectorMachines::new(0.001, CrossEntropy);
 
         model.fit(&x_train, &y_train, 0.1, 200);
 
