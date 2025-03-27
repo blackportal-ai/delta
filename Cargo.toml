@@ -7,7 +7,7 @@ members = [
     "examples/deep_learning/mnist",
     "examples/deep_learning/imagenet_v2",
     "examples/classical_ml/linear_regression",
-    "examples/classical_ml/logistic_regression", "examples/classical_ml/random_forest", "examples/classical_ml/k_nearest_neighbor",
+    "examples/classical_ml/logistic_regression", "examples/classical_ml/random_forest", "examples/classical_ml/k_nearest_neighbor", "examples/classical_ml/support_vector_machines",
 ]
 resolver = "2"
 
