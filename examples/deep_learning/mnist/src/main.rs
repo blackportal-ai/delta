@@ -2,7 +2,7 @@ use deltaml::{
     deep_learning::{
         activations::{ReluActivation, SoftmaxActivation},
         dataset::{DatasetOps, MnistDataset},
-        layers::{Dense, Flatten},
+        layers::{Conv2D, Dense, Flatten},
         losses::SparseCategoricalCrossEntropyLoss,
         models::Sequential,
         optimizers::Adam,
@@ -14,6 +14,15 @@ use deltaml::{
 async fn main() {
     // Create a neural network
     let mut model = Sequential::new()
+        .add(Conv2D::new(
+            2,
+            3,
+            1,
+            1,
+            Shape::from(IxDyn(&[1, 28, 28, 1])),
+            Some(ReluActivation::new()),
+            true,
+        ))
         .add(Flatten::new(Shape::from(IxDyn(&[28, 28])))) // Flatten layer
         .add(Dense::new(128, Some(ReluActivation::new()), true)) // Dense layer with 128 units
         .add(Dense::new(10, None::<SoftmaxActivation>, false)); // Output layer with 10 classes
