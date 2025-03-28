@@ -31,6 +31,7 @@ pub mod activations;
 pub mod dataset;
 pub mod encoders;
 pub mod errors;
+pub mod gradient_projector;
 pub mod layers;
 pub mod losses;
 pub mod models;
