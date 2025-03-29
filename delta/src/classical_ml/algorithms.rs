@@ -29,15 +29,13 @@
 
 use std::collections::HashMap;
 use std::fmt::Debug;
-use std::hash::Hash;
 use std::ops::{Add, AddAssign, Mul, Sub};
 use std::{collections::HashSet, ops::SubAssign};
 
 use libm::log2;
 use ndarray::{Array1, Array2, Axis, ScalarOperand};
-use num_traits::{Float, FromPrimitive, sign};
+use num_traits::{Float, FromPrimitive};
 use rand::Rng;
-use rand_distr::uniform::SampleUniform;
 
 use super::{Algorithm, batch_gradient_descent, logistic_gradient_descent, losses::Loss};
 
