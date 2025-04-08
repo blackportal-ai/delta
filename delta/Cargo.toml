@@ -19,20 +19,9 @@ keywords = ["machine-learning", "ml", "framework"]
 maintenance = { status = "actively-developed" }
 
 [dependencies]
-tokio = { workspace = true, features = ["full"] }
 rand = "0.8.5"
-flate2 = "1.0.35"
-log = "0.4.22"
-reqwest = "0.12.9"
 ndarray = "0.16.1"
-tar = "0.4.43"
-serde_json = "1.0.133"
-walkdir = "2.5.0"
-image = "0.25.5"
-serial_test = "3.2"
-rand_distr = "0.4.3"
 libm = "0.2.11"
-rayon = "1.10.0"
 
 [dependencies.num-traits]
 version = "0.2"
