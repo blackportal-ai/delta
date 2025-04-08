@@ -33,7 +33,6 @@ serial_test = "3.2"
 rand_distr = "0.4.3"
 libm = "0.2.11"
 rayon = "1.10.0"
-linfa-datasets = { version = "0.x", features = ["iris"] }
 
 [dependencies.num-traits]
 version = "0.2"
@@ -42,10 +41,11 @@ optional = true
 [target.'cfg(target_os = "macos")'.dependencies]
 metal = { version = "0.30.0", optional = true }
 
+[dev-dependencies]
+flamegraph = "0.6.6"
+linfa-datasets = { version = "0.x", features = ["iris"] }
+
 [features]
 default = ["classical_ml"]
 classical_ml = ["num-traits"]
 metal = ["dep:metal"]
-
-[dev-dependencies]
-flamegraph = "0.6.6"
