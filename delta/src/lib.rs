@@ -33,8 +33,6 @@ use std::path::PathBuf;
 
 #[cfg(feature = "classical_ml")]
 pub mod classical_ml;
-#[cfg(feature = "deep_learning")]
-pub mod deep_learning;
 
 pub mod devices;
 

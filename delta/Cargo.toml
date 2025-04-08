@@ -11,7 +11,7 @@ license = "BSD-3-Clause"
 documentation = "https://docs.rs/deltaml/latest/deltaml/"
 repository = "https://github.com/blackportal-ai/delta"
 readme = "../README.md"
-rust-version = "1.83.0"
+rust-version = "1.86.0"
 homepage = "https://blackportal.ai"
 keywords = ["machine-learning", "ml", "framework"]
 
@@ -45,8 +45,6 @@ metal = { version = "0.30.0", optional = true }
 [features]
 default = ["classical_ml"]
 classical_ml = ["num-traits"]
-deep_learning = []
-vision = ["deep_learning"]
 metal = ["dep:metal"]
 
 [dev-dependencies]
