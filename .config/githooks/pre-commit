@@ -1,8 +1,0 @@
-#!/bin/sh
-echo "Formatting code with rustfmt..."
-cargo fmt -- --force --write-mode overwrite
-
-if [ $? -ne 0 ]; then
-    echo "Failed to format. Please run 'cargo fmt' and try to commit."
-    exit 1
-fi
