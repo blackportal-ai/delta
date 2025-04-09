@@ -31,7 +31,7 @@ An open-source machine learning framework in Rust Δ.
 
 - **Extensibility:** The framework is modular, allowing users to plug in custom layers, optimizers, or preprocessing pipelines tailored to their unique needs.
 
-- **Efficient and Scalable Tools:** It provides highly efficient and scalable tools for building and training neural networks, supporting both small-scale experiments and large-scale production systems.
+- **Efficient and Scalable Tools:** It provides highly efficient and scalable tools for machine learning tasks, supporting both small-scale experiments and large-scale production systems.
 
 ## Getting Help
 
