@@ -1,17 +1,16 @@
 use deltaml::{
-    classical_ml::{Algorithm, algorithms::SupportVectorMachines, losses::CrossEntropy},
+    classical::{Algorithm, algorithms::KNearestNeighbors, losses::CrossEntropy},
     ndarray::{Array1, Array2},
 };
 
 #[tokio::main]
 async fn main() {
-    // create feature data for support vector machine
     let x_data =
         Array2::from_shape_vec((4, 2), vec![1.0, 2.0, 2.0, 3.0, 3.0, 3.0, 6.0, 5.0]).unwrap();
 
     let y_data = Array1::from_vec(vec![0.0, 0.0, 1.0, 1.0]);
 
-    let mut model = SupportVectorMachines::new(0.01, CrossEntropy);
+    let mut model = KNearestNeighbors::new(5, CrossEntropy);
 
     let learning_rate = 0.01;
     let epochs = 1000;

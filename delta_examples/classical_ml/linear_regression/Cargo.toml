@@ -1,9 +1,0 @@
-[package]
-name = "linear_regression"
-version = "0.1.0"
-edition = "2021"
-publish = false
-
-[dependencies]
-deltaml = { path = "../../../delta", features = ["classical_ml"] }
-tokio = { workspace = true, features = ["full"] }

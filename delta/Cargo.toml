@@ -35,6 +35,6 @@ flamegraph = "0.6.6"
 linfa-datasets = { version = "0.x", features = ["iris"] }
 
 [features]
-default = ["classical_ml"]
-classical_ml = ["num-traits"]
+default = ["classical"]
+classical = ["num-traits"]
 metal = ["dep:metal"]

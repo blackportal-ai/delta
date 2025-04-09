@@ -937,7 +937,7 @@ mod tests {
     use ndarray::{Array1, Array2};
     use num_traits::Float;
 
-    use crate::classical_ml::{
+    use crate::classical::{
         Algorithm,
         algorithms::{LinearRegression, LogisticRegression, RandomForest, SupportVectorMachines},
         losses::{CrossEntropy, MSE},

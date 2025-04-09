@@ -1,9 +1,9 @@
 [package]
-name = "random_forest"
+name = "linear_regression"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
 publish = false
 
 [dependencies]
-deltaml = { path = "../../../delta", features = ["classical_ml"] }
+deltaml = { path = "../../../delta", features = ["classical"] }
 tokio = { workspace = true, features = ["full"] }

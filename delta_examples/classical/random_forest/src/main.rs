@@ -1,5 +1,5 @@
 use deltaml::{
-    classical_ml::{Algorithm, algorithms::RandomForest, losses::MSE},
+    classical::{Algorithm, algorithms::RandomForest, losses::MSE},
     ndarray::{Array1, Array2},
 };
 

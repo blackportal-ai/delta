@@ -1,11 +1,11 @@
 [workspace]
 members = [
     "delta",
-    "delta_examples/classical_ml/linear_regression",
-    "delta_examples/classical_ml/logistic_regression",
-    "delta_examples/classical_ml/random_forest",
-    "delta_examples/classical_ml/k_nearest_neighbor",
-    "delta_examples/classical_ml/support_vector_machines",
+    "delta_examples/classical/linear_regression",
+    "delta_examples/classical/logistic_regression",
+    "delta_examples/classical/random_forest",
+    "delta_examples/classical/k_nearest_neighbor",
+    "delta_examples/classical/support_vector_machines",
 ]
 resolver = "2"
 

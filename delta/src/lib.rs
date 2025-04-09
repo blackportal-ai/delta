@@ -31,8 +31,8 @@ extern crate core;
 
 use std::path::PathBuf;
 
-#[cfg(feature = "classical_ml")]
-pub mod classical_ml;
+#[cfg(feature = "classical")]
+pub mod classical;
 
 pub mod devices;
 
