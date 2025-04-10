@@ -27,29 +27,21 @@
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-extern crate core;
+pub mod csv;
+pub mod json;
 
-use std::path::PathBuf;
+use ndarray::{Array1, Array2};
+use std::error::Error;
 
-#[cfg(feature = "classical")]
-pub mod classical;
-pub mod data;
-pub mod devices;
-
-// Re-exports for convenience
-pub mod ndarray {
-    pub use ndarray::*;
+pub trait DataLoader {
+    fn load<P: AsRef<std::path::Path>>(
+        path: P,
+    ) -> Result<(Array2<f64>, Array1<f64>), Box<dyn Error>>;
 }
 
-/// Returns the path to the workspace directory.
-///
-/// # Returns
-///
-/// A `PathBuf` representing the path to the workspace directory.
-pub fn get_workspace_dir() -> PathBuf {
-    // Add a default for flamegraph's to work
-    let path = std::env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".to_string());
-    let mut path = PathBuf::from(path);
-    path.pop();
-    path
+// Generic helper function to load data using any type implementing DataLoader
+pub fn load_data<T: DataLoader, P: AsRef<std::path::Path>>(
+    path: P,
+) -> Result<(Array2<f64>, Array1<f64>), Box<dyn Error>> {
+    T::load(path)
 }

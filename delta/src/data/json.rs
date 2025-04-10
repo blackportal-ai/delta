@@ -27,29 +27,42 @@
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-extern crate core;
+use crate::data::DataLoader;
+use ndarray::{Array1, Array2};
+use serde::Deserialize;
+use std::error::Error;
+use std::fs::File;
+use std::path::Path;
 
-use std::path::PathBuf;
+pub struct JsonLoader;
 
-#[cfg(feature = "classical")]
-pub mod classical;
-pub mod data;
-pub mod devices;
-
-// Re-exports for convenience
-pub mod ndarray {
-    pub use ndarray::*;
+#[derive(Deserialize)]
+struct DataPoint {
+    features: Vec<f64>,
+    target: f64,
 }
 
-/// Returns the path to the workspace directory.
-///
-/// # Returns
-///
-/// A `PathBuf` representing the path to the workspace directory.
-pub fn get_workspace_dir() -> PathBuf {
-    // Add a default for flamegraph's to work
-    let path = std::env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".to_string());
-    let mut path = PathBuf::from(path);
-    path.pop();
-    path
+impl DataLoader for JsonLoader {
+    fn load<P: AsRef<Path>>(path: P) -> Result<(Array2<f64>, Array1<f64>), Box<dyn Error>> {
+        let file = File::open(path)?;
+        let data: Vec<DataPoint> = serde_json::from_reader(file)?;
+
+        let n_rows = data.len();
+        if n_rows == 0 || data[0].features.is_empty() {
+            return Err("Empty JSON file or invalid data".into());
+        }
+        let n_cols = data[0].features.len();
+
+        let mut features_vec = Vec::with_capacity(n_rows * n_cols);
+        let mut targets_vec = Vec::with_capacity(n_rows);
+        for point in data {
+            features_vec.extend_from_slice(&point.features);
+            targets_vec.push(point.target);
+        }
+
+        let features = Array2::from_shape_vec((n_rows, n_cols), features_vec)?;
+        let targets = Array1::from_vec(targets_vec);
+
+        Ok((features, targets))
+    }
 }
