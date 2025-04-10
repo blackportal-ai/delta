@@ -132,6 +132,3 @@ rust-project.json
 
 # Flamegraph
 *.svg
-
-# Delta stuff
-delta/test_output/

@@ -28,9 +28,7 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 pub mod csv;
-pub mod processors;
 pub use csv::{CsvHeadersLoader, CsvLoader};
-pub use processors::{CsvDataset, process_csv_dataset};
 
 use ndarray::{Array1, Array2};
 use std::error::Error;
