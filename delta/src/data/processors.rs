@@ -40,7 +40,7 @@ use std::thread::{self, JoinHandle};
 
 /// Configuration for CSV dataset processing
 #[derive(Debug)]
-pub struct CsvDatasetConfig {
+pub struct CsvDataset {
     url: String,
     has_headers: bool,
     feature_col: usize,
@@ -51,9 +51,9 @@ pub struct CsvDatasetConfig {
     num_threads: usize,
 }
 
-impl CsvDatasetConfig {
+impl CsvDataset {
     pub fn new(url: &str, has_headers: bool, feature_col: usize, target_col: usize) -> Self {
-        CsvDatasetConfig {
+        CsvDataset {
             url: url.to_string(),
             has_headers,
             feature_col,
@@ -146,7 +146,7 @@ fn process_csv_chunk(
 
 /// Process a CSV dataset with multithreading
 pub fn process_csv_dataset(
-    config: CsvDatasetConfig,
+    config: CsvDataset,
 ) -> Result<(usize, usize), Box<dyn Error + Send + Sync + 'static>> {
     info!("Starting CSV dataset processing with config: {:?}", config);
 
@@ -254,7 +254,7 @@ mod tests {
             env_logger::builder().is_test(true).filter_level(log::LevelFilter::Debug).try_init();
 
         info!("Starting test_process_csv_breast_cancer");
-        let config = CsvDatasetConfig::new(
+        let config = CsvDataset::new(
             "https://archive.ics.uci.edu/ml/machine-learning-databases/breast-cancer-wisconsin/wdbc.data",
             false,
             2,
