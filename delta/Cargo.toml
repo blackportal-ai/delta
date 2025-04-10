@@ -25,6 +25,8 @@ libm = "0.2.11"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 csv = "1.1"
+reqwest = { version = "0.11", features = ["blocking"] }
+log = "0.4"
 
 [dependencies.num-traits]
 version = "0.2"
@@ -37,6 +39,7 @@ metal = { version = "0.30.0", optional = true }
 flamegraph = "0.6.6"
 linfa-datasets = { version = "0.x", features = ["iris"] }
 tempfile = "3.10"
+env_logger = "0.11"
 
 [features]
 default = ["classical"]
