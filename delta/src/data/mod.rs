@@ -29,6 +29,8 @@
 
 pub mod csv;
 
+pub use csv::{CsvHeadersLoader, CsvLoader};
+
 use ndarray::{Array1, Array2};
 use std::error::Error;
 
