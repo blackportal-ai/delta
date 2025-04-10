@@ -28,7 +28,6 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 pub mod csv;
-pub mod json;
 
 use ndarray::{Array1, Array2};
 use std::error::Error;
