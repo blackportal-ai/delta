@@ -298,4 +298,16 @@ mod tests {
         let result = load_data::<CsvLoader, _>("nonexistent.csv");
         assert!(matches!(result, Err(CsvError::FileOpen(_))));
     }
+
+    #[test]
+    fn test_load_all_missing_categorical() {
+        let csv_content = "1.0,,0\n2.0,,1\n3.0,,0\n";
+        let temp_file = create_temp_csv(csv_content);
+        let (features, targets) =
+            load_data::<CsvLoader, _>(temp_file.path()).expect("Failed to load CSV");
+        let expected_features = array![[1.0, 0.0], [2.0, 0.0], [3.0, 0.0]]; // "missing" = 0.0
+        let expected_targets = array![0.0, 1.0, 0.0];
+        assert_eq!(features, expected_features);
+        assert_eq!(targets, expected_targets);
+    }
 }
