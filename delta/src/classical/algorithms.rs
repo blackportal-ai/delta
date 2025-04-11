@@ -103,7 +103,7 @@ where
         for epoch in 0..epochs {
             let predictions = self.predict(x);
             let loss = self.calculate_loss(&predictions, y);
-            println!("Epoch {}: Loss = {:?}", epoch, loss);
+            // println!("Epoch {}: Loss = {:?}", epoch, loss);
 
             let (grad_weights, grad_bias) = batch_gradient_descent(
                 x,
@@ -113,12 +113,12 @@ where
             );
 
             // Debug
-            if epoch % 100 == 0 || epoch == epochs - 1 {
-                println!(
-                    "Epoch {}: Loss = {:?}, Weights = {:?}, Bias = {:?}, GradW = {:?}, GradB = {:?}",
-                    epoch, loss, self.weights, self.bias, grad_weights, grad_bias
-                );
-            }
+            // if epoch % 100 == 0 || epoch == epochs - 1 {
+            //     println!(
+            //         "Epoch {}: Loss = {:?}, Weights = {:?}, Bias = {:?}, GradW = {:?}, GradB = {:?}",
+            //         epoch, loss, self.weights, self.bias, grad_weights, grad_bias
+            //     );
+            // }
 
             // Update weights directly
             self.weights = Some(

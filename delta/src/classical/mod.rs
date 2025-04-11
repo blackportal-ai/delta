@@ -29,6 +29,9 @@
 
 pub mod algorithms;
 pub mod losses;
+pub mod normalization;
+
+pub use normalization::Normalization;
 
 use num_traits::FromPrimitive;
 use std::ops::SubAssign;
