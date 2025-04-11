@@ -30,6 +30,7 @@
 pub mod algorithms;
 pub mod losses;
 
+use num_traits::FromPrimitive;
 use std::ops::SubAssign;
 
 use losses::Loss;
@@ -111,13 +112,14 @@ fn batch_gradient_descent<T>(
     bias: T,
 ) -> (Array1<T>, T)
 where
-    T: Float + ScalarOperand + SubAssign,
+    T: Float + ScalarOperand + SubAssign + FromPrimitive,
 {
     let predictions = x.dot(weights) + bias;
     let m = T::from(x.shape()[0]).unwrap();
+    let error = predictions - y;
 
-    let grad_weights = x.t().dot(&(predictions.clone() - y)) / m;
-    let grad_bias = (predictions - y).sum() / m;
+    let grad_weights = x.t().dot(&error) * (T::from(2.0).unwrap() / m);
+    let grad_bias = error.sum() * (T::from(2.0).unwrap() / m);
 
     (grad_weights, grad_bias)
 }

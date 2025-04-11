@@ -49,14 +49,14 @@ where
     T: Float,
     L: Loss<T>,
 {
-    weights: Array1<T>,
+    weights: Option<Array1<T>>,
     bias: T,
     loss_function: L,
 }
 
 impl<T, L> LinearRegression<T, L>
 where
-    T: Float + ScalarOperand,
+    T: Float + ScalarOperand + Debug + FromPrimitive,
     L: Loss<T>,
 {
     /// Calculates the loss between predictions and actual values.
@@ -74,7 +74,7 @@ where
 
 impl<T, L> Algorithm<T, L> for LinearRegression<T, L>
 where
-    T: Float + ScalarOperand + SubAssign,
+    T: Float + ScalarOperand + SubAssign + Debug + FromPrimitive,
     L: Loss<T>,
 {
     /// Creates a new `LinearRegression` instance with the given loss function and optimizer.
@@ -86,7 +86,7 @@ where
     /// # Returns
     /// A new instance of `LinearRegression`.
     fn new(loss_function: L) -> Self {
-        LinearRegression { weights: Array1::zeros(1), bias: T::zero(), loss_function }
+        LinearRegression { weights: None, bias: T::zero(), loss_function }
     }
 
     /// Fits the model to the given data using batch gradient descent.
@@ -97,14 +97,41 @@ where
     /// - `learning_rate`: The learning rate for gradient descent.
     /// - `epochs`: The number of iterations for gradient descent.
     fn fit(&mut self, x: &Array2<T>, y: &Array1<T>, learning_rate: T, epochs: usize) {
-        for _ in 0..epochs {
+        let (_, n_features) = x.dim();
+        self.weights = Some(Array1::zeros(n_features)); // Initialize weights
+
+        for epoch in 0..epochs {
             let predictions = self.predict(x);
-            let _loss = self.calculate_loss(&predictions, y);
+            let loss = self.calculate_loss(&predictions, y);
+            println!("Epoch {}: Loss = {:?}", epoch, loss);
 
-            let (grad_weights, grad_bias) = batch_gradient_descent(x, y, &self.weights, self.bias);
+            let (grad_weights, grad_bias) = batch_gradient_descent(
+                x,
+                y,
+                self.weights.as_ref().expect("Weights not initialized"),
+                self.bias,
+            );
 
-            self.weights -= &(grad_weights * learning_rate);
+            // Debug
+            if epoch % 100 == 0 || epoch == epochs - 1 {
+                println!(
+                    "Epoch {}: Loss = {:?}, Weights = {:?}, Bias = {:?}, GradW = {:?}, GradB = {:?}",
+                    epoch, loss, self.weights, self.bias, grad_weights, grad_bias
+                );
+            }
+
+            // Update weights directly
+            self.weights = Some(
+                self.weights.take().expect("Weights not initialized")
+                    - &(grad_weights * learning_rate),
+            );
             self.bias -= grad_bias * learning_rate;
+
+            // Check for NaN early
+            if self.weights.as_ref().unwrap().iter().any(|&w| w.is_nan()) || self.bias.is_nan() {
+                println!("NaN detected at epoch {}", epoch);
+                break;
+            }
         }
     }
 
@@ -116,7 +143,7 @@ where
     /// # Returns
     /// Predicted values as a 1D array.
     fn predict(&self, x: &Array2<T>) -> Array1<T> {
-        x.dot(&self.weights) + self.bias
+        x.dot(self.weights.as_ref().expect("Weights not initialized")) + self.bias
     }
 }
 

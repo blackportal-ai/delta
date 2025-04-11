@@ -1,29 +1,33 @@
 use deltaml::{
     classical::{Algorithm, algorithms::LinearRegression, losses::MSE},
-    ndarray::{Array1, Array2},
+    data::{CsvHeadersLoader, load_data},
 };
 
 #[tokio::main]
 async fn main() {
-    // Create some dummy data for example purposes
-    let x_data = Array2::from_shape_vec((5, 1), vec![1.0, 2.0, 3.0, 4.0, 5.0]).unwrap();
-    let y_data = Array1::from_vec(vec![2.0, 4.0, 5.0, 4.0, 5.0]);
+    // Using California Housing Prices dataset from Kaggle
+    let (x_train, y_train) = load_data::<CsvHeadersLoader, _>("../train_data.csv")
+        .expect("Failed to load train_data.csv");
+    println!("x_train shape: {:?}", x_train.dim());
 
-    // Instantiate the model
+    // Instantiate the model with Mean Squared Error loss
     let mut model = LinearRegression::new(MSE);
 
     // Train the model
     let learning_rate = 0.01;
     let epochs = 1000;
-    model.fit(&x_data, &y_data, learning_rate, epochs);
+    model.fit(&x_train, &y_train, learning_rate, epochs);
 
-    // Make predictions with the trained model
-    let new_data = Array2::from_shape_vec((3, 1), vec![2.5, 3.5, 4.5]).unwrap();
-    let predictions = model.predict(&new_data);
+    // Load test data
+    let (x_test, y_test) =
+        load_data::<CsvHeadersLoader, _>("../test_data.csv").expect("Failed to load test_data.csv");
 
-    println!("Predictions for new data: {:?}", predictions);
+    // Make predictions
+    let predictions = model.predict(&x_test);
 
-    // Calculate accuracy or loss for the test data for demonstration
-    let test_loss = model.calculate_loss(&model.predict(&x_data), &y_data);
-    println!("Test Loss after training: {:.6}", test_loss);
+    println!("Predictions for test data: {:?}", predictions);
+
+    // Calculate test loss (MSE)
+    let test_loss = model.calculate_loss(&predictions, &y_test);
+    println!("Test Loss (MSE) after training: {:.6}", test_loss);
 }
