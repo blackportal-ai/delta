@@ -69,11 +69,7 @@ pub enum Device {
     /// - `device`: A Metal device object.
     /// - `queue`: A command queue for issuing commands to the device.
     #[cfg(all(target_os = "macos", feature = "metal"))]
-    Metal {
-        device: metal::Device,
-        queue: metal::CommandQueue,
-    },
-
+    Metal { device: metal::Device, queue: metal::CommandQueue },
     // Placeholder for future device types.
     // Cuda,
     // OpenCL,

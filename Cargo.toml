@@ -3,9 +3,6 @@ members = [
     "delta",
     "delta_examples/classical/linear_regression",
     "delta_examples/classical/logistic_regression",
-    "delta_examples/classical/random_forest",
-    "delta_examples/classical/k_nearest_neighbor",
-    "delta_examples/classical/support_vector_machines",
 ]
 resolver = "2"
 
