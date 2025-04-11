@@ -29,6 +29,7 @@
 
 use crate::data::DataLoader;
 use ndarray::{Array1, Array2};
+use std::collections::HashMap;
 use std::error::Error;
 use std::fs::File;
 use std::path::Path;
@@ -45,14 +46,11 @@ fn load_csv_common<P: AsRef<Path>>(
     let mut rdr =
         csv::ReaderBuilder::new().has_headers(has_headers).flexible(true).from_reader(file);
 
-    let mut data: Vec<Vec<f64>> = Vec::new();
+    // Parse all fields as strings initially
+    let mut data: Vec<Vec<String>> = Vec::new();
     for (i, result) in rdr.records().enumerate() {
         let record = result?;
-        let row: Vec<f64> = record
-            .iter()
-            .map(|field| field.parse::<f64>())
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| format!("Row {}: {}", i + 1, e))?;
+        let row: Vec<String> = record.iter().map(|s| s.to_string()).collect();
         if i > 0 && row.len() != data[0].len() {
             return Err(format!(
                 "Inconsistent column count: row {} has {} columns, expected {}",
@@ -66,18 +64,73 @@ fn load_csv_common<P: AsRef<Path>>(
     }
 
     let n_rows = data.len();
-    if n_rows == 0 || data[0].is_empty() {
-        return Err("Empty CSV file or invalid data".into());
+    if n_rows == 0 {
+        return Err("Empty CSV file".into());
     }
     let n_cols = data[0].len();
     if n_cols < 2 {
         return Err("CSV must have at least one feature and one target column".into());
     }
 
-    let feature_data: Vec<f64> = data.iter().flat_map(|row| row[..n_cols - 1].to_vec()).collect();
-    let target_data: Vec<f64> = data.iter().map(|row| row[n_cols - 1]).collect();
+    // Identify categorical columns (non-numeric, except target)
+    let mut is_categorical = vec![false; n_cols];
+    for col in 0..n_cols - 1 {
+        // Exclude target
+        is_categorical[col] =
+            data.iter().any(|row| !row[col].is_empty() && row[col].parse::<f64>().is_err());
+    }
 
-    let features = Array2::from_shape_vec((n_rows, n_cols - 1), feature_data)?;
+    // Encode data
+    let mut feature_data: Vec<Vec<f64>> = Vec::with_capacity(n_rows);
+    let mut target_data: Vec<f64> = Vec::with_capacity(n_rows);
+    let mut encoders: Vec<HashMap<String, f64>> = vec![HashMap::new(); n_cols];
+
+    for row in data.iter() {
+        let mut feature_row = Vec::with_capacity(n_cols - 1);
+        for col in 0..n_cols - 1 {
+            let value = &row[col];
+            if is_categorical[col] {
+                // Label encode categorical, impute missing with "missing"
+                let encoder = &mut encoders[col];
+                let imputed_value =
+                    if value.is_empty() { "missing".to_string() } else { value.clone() };
+                let next_id = encoder.len() as f64;
+                let encoded = *encoder.entry(imputed_value).or_insert(next_id);
+                feature_row.push(encoded);
+            } else {
+                // Parse numeric, impute missing with 0.0
+                let num = if value.is_empty() {
+                    0.0
+                } else {
+                    value.parse::<f64>().map_err(|e| {
+                        format!(
+                            "Row {}: Invalid numeric value '{}': {}",
+                            feature_data.len() + 1,
+                            value,
+                            e
+                        )
+                    })?
+                };
+                feature_row.push(num);
+            }
+        }
+        feature_data.push(feature_row);
+
+        // Parse target (always numeric), impute missing with 0.0
+        let target_value = &row[n_cols - 1];
+        let target = if target_value.is_empty() {
+            0.0
+        } else {
+            target_value.parse::<f64>().map_err(|e| {
+                format!("Row {}: Invalid target '{}': {}", target_data.len() + 1, target_value, e)
+            })?
+        };
+        target_data.push(target);
+    }
+
+    // Convert to arrays
+    let feature_data_flat: Vec<f64> = feature_data.into_iter().flatten().collect();
+    let features = Array2::from_shape_vec((n_rows, n_cols - 1), feature_data_flat)?;
     let targets = Array1::from_vec(target_data);
 
     Ok((features, targets))
@@ -111,30 +164,45 @@ mod tests {
     }
 
     #[test]
-    fn test_load_default_no_headers() {
-        let csv_content = "1.0,2.0\n2.0,4.0\n3.0,6.0\n4.0,8.0\n";
+    fn test_load_numeric_no_headers() {
+        let csv_content = "1.0,2.0\n3.0,4.0\n5.0,6.0\n";
         let temp_file = create_temp_csv(csv_content);
 
         let (features, targets) =
             load_data::<CsvLoader, _>(temp_file.path()).expect("Failed to load CSV");
 
-        let expected_features = array![[1.0], [2.0], [3.0], [4.0]];
-        let expected_targets = array![2.0, 4.0, 6.0, 8.0];
+        let expected_features = array![[1.0], [3.0], [5.0]];
+        let expected_targets = array![2.0, 4.0, 6.0];
 
         assert_eq!(features, expected_features, "Features do not match");
         assert_eq!(targets, expected_targets, "Targets do not match");
     }
 
     #[test]
-    fn test_load_multi_feature_columns() {
-        let csv_content = "1.0,2.0,3.0\n4.0,5.0,6.0\n7.0,8.0,9.0\n";
+    fn test_load_categorical_no_headers() {
+        let csv_content = "1.0,male,0\n2.0,female,1\n3.0,male,0\n";
         let temp_file = create_temp_csv(csv_content);
 
         let (features, targets) =
             load_data::<CsvLoader, _>(temp_file.path()).expect("Failed to load CSV");
 
-        let expected_features = array![[1.0, 2.0], [4.0, 5.0], [7.0, 8.0]];
-        let expected_targets = array![3.0, 6.0, 9.0];
+        let expected_features = array![[1.0, 0.0], [2.0, 1.0], [3.0, 0.0]]; // male=0.0, female=1.0
+        let expected_targets = array![0.0, 1.0, 0.0];
+
+        assert_eq!(features, expected_features, "Features do not match");
+        assert_eq!(targets, expected_targets, "Targets do not match");
+    }
+
+    #[test]
+    fn test_load_headers_with_categoricals() {
+        let csv_content = "age,gender,target\n25,male,0\n30,female,1\n35,male,0\n";
+        let temp_file = create_temp_csv(csv_content);
+
+        let (features, targets) =
+            load_data::<CsvHeadersLoader, _>(temp_file.path()).expect("Failed to load CSV");
+
+        let expected_features = array![[25.0, 0.0], [30.0, 1.0], [35.0, 0.0]]; // male=0.0, female=1.0
+        let expected_targets = array![0.0, 1.0, 0.0];
 
         assert_eq!(features, expected_features, "Features do not match");
         assert_eq!(targets, expected_targets, "Targets do not match");
@@ -147,9 +215,7 @@ mod tests {
 
         let result = load_data::<CsvLoader, _>(temp_file.path());
         assert!(result.is_err(), "Loading empty file should fail");
-        if let Err(e) = result {
-            assert_eq!(e.to_string(), "Empty CSV file or invalid data", "Unexpected error message");
-        }
+        assert_eq!(result.unwrap_err().to_string(), "Empty CSV file", "Unexpected error message");
     }
 
     #[test]
@@ -159,83 +225,91 @@ mod tests {
 
         let result = load_data::<CsvLoader, _>(temp_file.path());
         assert!(result.is_err(), "Loading single-column CSV should fail");
-        if let Err(e) = result {
-            assert_eq!(
-                e.to_string(),
-                "CSV must have at least one feature and one target column",
-                "Unexpected error message"
-            );
-        }
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "CSV must have at least one feature and one target column",
+            "Unexpected error message"
+        );
     }
 
     #[test]
-    fn test_load_invalid_numeric_data() {
-        let csv_content = "1.0,2.0\nabc,4.0\n3.0,6.0\n";
+    fn test_load_missing_numeric_value() {
+        let csv_content = "1.0,,0\n2.0,4.0,1\n";
         let temp_file = create_temp_csv(csv_content);
 
-        let result = load_data::<CsvLoader, _>(temp_file.path());
-        assert!(result.is_err(), "Loading invalid numeric data should fail");
-        if let Err(e) = result {
-            assert!(
-                e.to_string().contains("Row 2: invalid float literal"),
-                "Unexpected error: {}",
-                e
-            );
-        }
+        let (features, targets) =
+            load_data::<CsvLoader, _>(temp_file.path()).expect("Failed to load CSV");
+
+        let expected_features = array![[1.0, 0.0], [2.0, 4.0]]; // "" imputed as 0.0
+        let expected_targets = array![0.0, 1.0];
+
+        assert_eq!(features, expected_features, "Features do not match");
+        assert_eq!(targets, expected_targets, "Targets do not match");
     }
 
     #[test]
-    fn test_load_inconsistent_column_count() {
-        let csv_content = "1.0,2.0\n2.0,4.0,5.0\n3.0,6.0\n";
+    fn test_load_missing_categorical_value() {
+        let csv_content = "1.0,male,0\n2.0,,1\n3.0,female,0\n";
+        let temp_file = create_temp_csv(csv_content);
+
+        let (features, targets) =
+            load_data::<CsvLoader, _>(temp_file.path()).expect("Failed to load CSV");
+
+        let expected_features = array![[1.0, 0.0], [2.0, 1.0], [3.0, 2.0]]; // male=0.0, missing=1.0, female=2.0
+        let expected_targets = array![0.0, 1.0, 0.0];
+
+        assert_eq!(features, expected_features, "Features do not match");
+        assert_eq!(targets, expected_targets, "Targets do not match");
+    }
+
+    #[test]
+    fn test_load_missing_target() {
+        let csv_content = "1.0,male,0\n2.0,female,\n3.0,male,1\n";
+        let temp_file = create_temp_csv(csv_content);
+
+        let (features, targets) =
+            load_data::<CsvLoader, _>(temp_file.path()).expect("Failed to load CSV");
+
+        let expected_features = array![[1.0, 0.0], [2.0, 1.0], [3.0, 0.0]]; // male=0.0, female=1.0
+        let expected_targets = array![0.0, 0.0, 1.0]; // "" imputed as 0.0
+
+        assert_eq!(features, expected_features, "Features do not match");
+        assert_eq!(targets, expected_targets, "Targets do not match");
+    }
+
+    #[test]
+    fn test_load_invalid_target() {
+        let csv_content = "1.0,male,invalid\n2.0,female,1\n";
         let temp_file = create_temp_csv(csv_content);
 
         let result = load_data::<CsvLoader, _>(temp_file.path());
-        assert!(result.is_err(), "Loading inconsistent column count should fail");
-        if let Err(e) = result {
-            assert!(
-                e.to_string().contains("Inconsistent column count: row 2"),
-                "Unexpected error: {}",
-                e
-            );
-        }
+        assert!(result.is_err(), "Loading invalid target should fail");
+        assert!(
+            result.unwrap_err().to_string().contains("Invalid target 'invalid'"),
+            "Unexpected error"
+        );
+    }
+
+    #[test]
+    fn test_load_inconsistent_columns() {
+        let csv_content = "1.0,male,0\n2.0,female,1,extra\n";
+        let temp_file = create_temp_csv(csv_content);
+
+        let result = load_data::<CsvLoader, _>(temp_file.path());
+        assert!(result.is_err(), "Loading inconsistent columns should fail");
+        assert!(
+            result.unwrap_err().to_string().contains("Inconsistent column count"),
+            "Unexpected error"
+        );
     }
 
     #[test]
     fn test_load_nonexistent_file() {
         let result = load_data::<CsvLoader, _>("nonexistent.csv");
         assert!(result.is_err(), "Loading nonexistent file should fail");
-        if let Err(e) = result {
-            assert!(e.to_string().contains("No such file or directory"), "Unexpected error: {}", e);
-        }
-    }
-
-    #[test]
-    fn test_load_single_row() {
-        let csv_content = "1.0,2.0\n";
-        let temp_file = create_temp_csv(csv_content);
-
-        let (features, targets) =
-            load_data::<CsvLoader, _>(temp_file.path()).expect("Failed to load CSV");
-
-        let expected_features = array![[1.0]];
-        let expected_targets = array![2.0];
-
-        assert_eq!(features, expected_features, "Features do not match");
-        assert_eq!(targets, expected_targets, "Targets do not match");
-    }
-
-    #[test]
-    fn test_load_headers() {
-        let csv_content = "x,y\n1.0,2.0\n2.0,4.0\n3.0,6.0\n";
-        let temp_file = create_temp_csv(csv_content);
-
-        let (features, targets) =
-            load_data::<CsvHeadersLoader, _>(temp_file.path()).expect("Failed to load CSV");
-
-        let expected_features = array![[1.0], [2.0], [3.0]];
-        let expected_targets = array![2.0, 4.0, 6.0];
-
-        assert_eq!(features, expected_features, "Features do not match");
-        assert_eq!(targets, expected_targets, "Targets do not match");
+        assert!(
+            result.unwrap_err().to_string().contains("No such file or directory"),
+            "Unexpected error"
+        );
     }
 }
