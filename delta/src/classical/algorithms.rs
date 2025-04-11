@@ -580,6 +580,22 @@ where
         counts.into_iter().max_by_key(|&(_, count)| count).map(|(pred, _)| pred).unwrap()
     }
 
+    /// Calculates the loss between predicted and actual values using the model's loss function.
+    ///
+    /// This method computes the error of the random forest's predictions by applying the
+    /// configured loss function to the predicted and actual target values. It is useful for
+    /// evaluating the model's performance on a dataset.
+    ///
+    /// # Parameters
+    /// - `predictions`: A 1D array (`Array1<T>`) containing the model's predicted values,
+    ///   typically obtained from the random forest's prediction process.
+    /// - `actuals`: A 1D array (`Array1<T>`) containing the true target values, corresponding
+    ///   to the same data points as `predictions`.
+    ///
+    /// # Returns
+    /// A single value of type `T` representing the total loss across all predictions, as
+    /// determined by the loss function `L`. The exact interpretation (e.g., mean squared error,
+    /// cross-entropy) depends on the `Loss<T>` implementation.
     pub fn calculate_loss(&self, predictions: &Array1<T>, actuals: &Array1<T>) -> T {
         self.loss_function.calculate(predictions, actuals)
     }
