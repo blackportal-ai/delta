@@ -28,20 +28,20 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 pub mod csv;
+pub mod error;
+
 pub use csv::{CsvHeadersLoader, CsvLoader};
 
 use ndarray::{Array1, Array2};
-use std::error::Error;
 
 pub trait DataLoader {
-    fn load<P: AsRef<std::path::Path>>(
-        path: P,
-    ) -> Result<(Array2<f64>, Array1<f64>), Box<dyn Error>>;
+    fn load<P: AsRef<std::path::Path>>(path: P) -> Result<(Array2<f64>, Array1<f64>), Self::Error>;
+    type Error: std::error::Error + 'static;
 }
 
 // Generic helper function to load data using any type implementing DataLoader
 pub fn load_data<T: DataLoader, P: AsRef<std::path::Path>>(
     path: P,
-) -> Result<(Array2<f64>, Array1<f64>), Box<dyn Error>> {
+) -> Result<(Array2<f64>, Array1<f64>), T::Error> {
     T::load(path)
 }

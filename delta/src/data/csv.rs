@@ -30,9 +30,10 @@
 use crate::data::DataLoader;
 use ndarray::{Array1, Array2};
 use std::collections::HashMap;
-use std::error::Error;
 use std::fs::File;
 use std::path::Path;
+
+use super::error::CsvError;
 
 pub struct CsvLoader;
 pub struct CsvHeadersLoader;
@@ -40,7 +41,7 @@ pub struct CsvHeadersLoader;
 fn load_csv_common<P: AsRef<Path>>(
     path: P,
     has_headers: bool,
-) -> Result<(Array2<f64>, Array1<f64>), Box<dyn Error>> {
+) -> Result<(Array2<f64>, Array1<f64>), CsvError> {
     let path = path.as_ref();
     let file = File::open(path)?;
     let mut rdr =
@@ -52,24 +53,22 @@ fn load_csv_common<P: AsRef<Path>>(
         let record = result?;
         let row: Vec<String> = record.iter().map(|s| s.to_string()).collect();
         if i > 0 && row.len() != data[0].len() {
-            return Err(format!(
-                "Inconsistent column count: row {} has {} columns, expected {}",
-                i + 1,
-                row.len(),
-                data[0].len()
-            )
-            .into());
+            return Err(CsvError::InconsistentColumns {
+                row: i + 1,
+                actual: row.len(),
+                expected: data[0].len(),
+            });
         }
         data.push(row);
     }
 
     let n_rows = data.len();
     if n_rows == 0 {
-        return Err("Empty CSV file".into());
+        return Err(CsvError::EmptyFile);
     }
     let n_cols = data[0].len();
     if n_cols < 2 {
-        return Err("CSV must have at least one feature and one target column".into());
+        return Err(CsvError::InsufficientColumns);
     }
 
     // Identify categorical columns (non-numeric, except target)
@@ -102,13 +101,10 @@ fn load_csv_common<P: AsRef<Path>>(
                 let num = if value.is_empty() {
                     0.0
                 } else {
-                    value.parse::<f64>().map_err(|e| {
-                        format!(
-                            "Row {}: Invalid numeric value '{}': {}",
-                            feature_data.len() + 1,
-                            value,
-                            e
-                        )
+                    value.parse::<f64>().map_err(|e| CsvError::InvalidNumeric {
+                        value: value.clone(),
+                        row: feature_data.len() + 1,
+                        source: e,
                     })?
                 };
                 feature_row.push(num);
@@ -121,8 +117,10 @@ fn load_csv_common<P: AsRef<Path>>(
         let target = if target_value.is_empty() {
             0.0
         } else {
-            target_value.parse::<f64>().map_err(|e| {
-                format!("Row {}: Invalid target '{}': {}", target_data.len() + 1, target_value, e)
+            target_value.parse::<f64>().map_err(|e| CsvError::InvalidTarget {
+                value: target_value.clone(),
+                row: target_data.len() + 1,
+                source: e,
             })?
         };
         target_data.push(target);
@@ -137,13 +135,17 @@ fn load_csv_common<P: AsRef<Path>>(
 }
 
 impl DataLoader for CsvLoader {
-    fn load<P: AsRef<Path>>(path: P) -> Result<(Array2<f64>, Array1<f64>), Box<dyn Error>> {
+    type Error = CsvError;
+
+    fn load<P: AsRef<Path>>(path: P) -> Result<(Array2<f64>, Array1<f64>), Self::Error> {
         load_csv_common(path, false)
     }
 }
 
 impl DataLoader for CsvHeadersLoader {
-    fn load<P: AsRef<Path>>(path: P) -> Result<(Array2<f64>, Array1<f64>), Box<dyn Error>> {
+    type Error = CsvError;
+
+    fn load<P: AsRef<Path>>(path: P) -> Result<(Array2<f64>, Array1<f64>), Self::Error> {
         load_csv_common(path, true)
     }
 }
@@ -186,7 +188,7 @@ mod tests {
         let (features, targets) =
             load_data::<CsvLoader, _>(temp_file.path()).expect("Failed to load CSV");
 
-        let expected_features = array![[1.0, 0.0], [2.0, 1.0], [3.0, 0.0]]; // male=0.0, female=1.0
+        let expected_features = array![[1.0, 0.0], [2.0, 1.0], [3.0, 0.0]];
         let expected_targets = array![0.0, 1.0, 0.0];
 
         assert_eq!(features, expected_features, "Features do not match");
@@ -201,7 +203,7 @@ mod tests {
         let (features, targets) =
             load_data::<CsvHeadersLoader, _>(temp_file.path()).expect("Failed to load CSV");
 
-        let expected_features = array![[25.0, 0.0], [30.0, 1.0], [35.0, 0.0]]; // male=0.0, female=1.0
+        let expected_features = array![[25.0, 0.0], [30.0, 1.0], [35.0, 0.0]];
         let expected_targets = array![0.0, 1.0, 0.0];
 
         assert_eq!(features, expected_features, "Features do not match");
@@ -214,8 +216,7 @@ mod tests {
         let temp_file = create_temp_csv(csv_content);
 
         let result = load_data::<CsvLoader, _>(temp_file.path());
-        assert!(result.is_err(), "Loading empty file should fail");
-        assert_eq!(result.unwrap_err().to_string(), "Empty CSV file", "Unexpected error message");
+        assert!(matches!(result, Err(CsvError::EmptyFile)));
     }
 
     #[test]
@@ -224,12 +225,7 @@ mod tests {
         let temp_file = create_temp_csv(csv_content);
 
         let result = load_data::<CsvLoader, _>(temp_file.path());
-        assert!(result.is_err(), "Loading single-column CSV should fail");
-        assert_eq!(
-            result.unwrap_err().to_string(),
-            "CSV must have at least one feature and one target column",
-            "Unexpected error message"
-        );
+        assert!(matches!(result, Err(CsvError::InsufficientColumns)));
     }
 
     #[test]
@@ -240,7 +236,7 @@ mod tests {
         let (features, targets) =
             load_data::<CsvLoader, _>(temp_file.path()).expect("Failed to load CSV");
 
-        let expected_features = array![[1.0, 0.0], [2.0, 4.0]]; // "" imputed as 0.0
+        let expected_features = array![[1.0, 0.0], [2.0, 4.0]];
         let expected_targets = array![0.0, 1.0];
 
         assert_eq!(features, expected_features, "Features do not match");
@@ -255,7 +251,7 @@ mod tests {
         let (features, targets) =
             load_data::<CsvLoader, _>(temp_file.path()).expect("Failed to load CSV");
 
-        let expected_features = array![[1.0, 0.0], [2.0, 1.0], [3.0, 2.0]]; // male=0.0, missing=1.0, female=2.0
+        let expected_features = array![[1.0, 0.0], [2.0, 1.0], [3.0, 2.0]];
         let expected_targets = array![0.0, 1.0, 0.0];
 
         assert_eq!(features, expected_features, "Features do not match");
@@ -270,8 +266,8 @@ mod tests {
         let (features, targets) =
             load_data::<CsvLoader, _>(temp_file.path()).expect("Failed to load CSV");
 
-        let expected_features = array![[1.0, 0.0], [2.0, 1.0], [3.0, 0.0]]; // male=0.0, female=1.0
-        let expected_targets = array![0.0, 0.0, 1.0]; // "" imputed as 0.0
+        let expected_features = array![[1.0, 0.0], [2.0, 1.0], [3.0, 0.0]];
+        let expected_targets = array![0.0, 0.0, 1.0];
 
         assert_eq!(features, expected_features, "Features do not match");
         assert_eq!(targets, expected_targets, "Targets do not match");
@@ -283,11 +279,7 @@ mod tests {
         let temp_file = create_temp_csv(csv_content);
 
         let result = load_data::<CsvLoader, _>(temp_file.path());
-        assert!(result.is_err(), "Loading invalid target should fail");
-        assert!(
-            result.unwrap_err().to_string().contains("Invalid target 'invalid'"),
-            "Unexpected error"
-        );
+        assert!(matches!(result, Err(CsvError::InvalidTarget { value, .. }) if value == "invalid"));
     }
 
     #[test]
@@ -296,20 +288,14 @@ mod tests {
         let temp_file = create_temp_csv(csv_content);
 
         let result = load_data::<CsvLoader, _>(temp_file.path());
-        assert!(result.is_err(), "Loading inconsistent columns should fail");
         assert!(
-            result.unwrap_err().to_string().contains("Inconsistent column count"),
-            "Unexpected error"
+            matches!(result, Err(CsvError::InconsistentColumns { row, actual, expected }) if row == 2 && actual == 4 && expected == 3)
         );
     }
 
     #[test]
     fn test_load_nonexistent_file() {
         let result = load_data::<CsvLoader, _>("nonexistent.csv");
-        assert!(result.is_err(), "Loading nonexistent file should fail");
-        assert!(
-            result.unwrap_err().to_string().contains("No such file or directory"),
-            "Unexpected error"
-        );
+        assert!(matches!(result, Err(CsvError::FileOpen(_))));
     }
 }
