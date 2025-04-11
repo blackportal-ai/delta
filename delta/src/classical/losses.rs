@@ -40,10 +40,6 @@ pub struct MSE;
 #[derive(Clone)]
 pub struct CrossEntropy;
 
-/// A struct representing the Entropy Loss for Decision Treee
-#[derive(Clone)]
-pub struct Entropy;
-
 /// A trait for loss functions, which calculates the error between predictions and actual values.
 pub trait Loss<T> {
     /// Calculates the loss value given the predicted values and the actual values.
