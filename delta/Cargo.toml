@@ -19,12 +19,8 @@ keywords = ["machine-learning", "ml", "framework"]
 maintenance = { status = "actively-developed" }
 
 [dependencies]
-rand = "0.8.5"
 ndarray = "0.16.1"
-libm = "0.2.11"
 csv = "1.1"
-reqwest = { version = "0.11", features = ["blocking"] }
-log = "0.4"
 thiserror = "2.0.12"
 
 [dependencies.num-traits]
