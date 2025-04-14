@@ -30,33 +30,19 @@
 use ndarray::{Array1, Array2, Axis};
 use num_traits::{Float, FromPrimitive};
 
-/// Trait defining the interface for data scalers.
-///
-/// This trait provides methods for fitting a scaler to data, transforming data,
-/// and inverse-transforming data, ensuring consistency across different scaler implementations.
 pub trait Scaler<T: Float> {
-    /// Fits the scaler to the data, computing necessary statistics (e.g., mean, std).
     fn fit(&mut self, x: &Array2<T>);
 
-    /// Transforms the data using the fitted parameters.
     fn transform(&self, x: &Array2<T>) -> Array2<T>;
 
-    /// Inverse-transforms the data back to the original scale.
     fn inverse_transform(&self, x: &Array2<T>) -> Array2<T>;
 
-    /// Fits and transforms the data in one step.
     fn fit_transform(&mut self, x: &Array2<T>) -> Array2<T> {
         self.fit(x);
         self.transform(x)
     }
 }
 
-/// StandardScaler normalizes data to have zero mean and unit variance.
-///
-/// For each feature, it computes:
-///     x_scaled = (x - mean) / std
-///
-/// It stores the mean and standard deviation for transformation and inverse transformation.
 pub struct StandardScaler<T: Float> {
     mean: Option<Array1<T>>,
     std: Option<Array1<T>>,

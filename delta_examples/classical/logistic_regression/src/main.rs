@@ -8,6 +8,8 @@ async fn main() {
     // Using Breast Cancer Wisconsin (Diagnostic) dataset from UCI (already prepared with splits)
     let (x_train, y_train) =
         load_data::<CsvLoader, _>("../train_data.csv").expect("Failed to load train_data.csv");
+    let (x_test, y_test) =
+        load_data::<CsvLoader, _>("../test_data.csv").expect("Failed to load test_data.csv");
 
     // Instantiate the model
     let mut model = LogisticRegression::new_with_defaults(CrossEntropy);
@@ -18,9 +20,6 @@ async fn main() {
     model.fit(&x_train, &y_train, learning_rate, epochs);
 
     // Make predictions with the trained model
-    let (x_test, y_test) =
-        load_data::<CsvLoader, _>("../test_data.csv").expect("Failed to load test_data.csv");
-
     let predictions = model.predict(&x_test);
 
     println!("Predictions for new data (probabilities): {:?}", predictions);
