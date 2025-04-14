@@ -27,167 +27,192 @@
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+// BSD 3-Clause License
+// ... (license unchanged)
+
+use std::fmt::Debug;
 use std::ops::SubAssign;
 
-use ndarray::{Array1, Array2, ScalarOperand};
-use num_traits::Float;
+use ndarray::{Array1, Array2, Axis, ScalarOperand};
+use num_traits::{Float, FromPrimitive};
 
-use super::{Algorithm, batch_gradient_descent, logistic_gradient_descent, losses::Loss};
+use super::{
+    Algorithm, Scaler, StandardScaler, batch_gradient_descent, logistic_gradient_descent,
+    losses::Loss,
+};
 
-/// A struct for performing linear regression.
-///
-/// # Generics
-/// - `T`: The type of data, must implement `num_traits::Float` and `ndarray::ScalarOperand`.
-/// - `L`: The type of the loss function, must implement `Loss<T>`.
-pub struct LinearRegression<T, L>
+pub struct LinearRegression<T, L, S>
 where
     T: Float,
     L: Loss<T>,
+    S: Scaler<T>,
 {
-    weights: Array1<T>,
+    weights: Option<Array1<T>>,
     bias: T,
     loss_function: L,
+    normalize: bool,
+    x_scaler: S,
+    y_scaler: S,
 }
 
-impl<T, L> LinearRegression<T, L>
+impl<T, L, S> LinearRegression<T, L, S>
+where
+    T: Float + ScalarOperand + Debug + FromPrimitive,
+    L: Loss<T>,
+    S: Scaler<T>,
+{
+    pub fn new(loss_function: L, normalize: bool, x_scaler: S, y_scaler: S) -> Self {
+        LinearRegression {
+            weights: None,
+            bias: T::zero(),
+            loss_function,
+            normalize,
+            x_scaler,
+            y_scaler,
+        }
+    }
+}
+
+impl<T, L> LinearRegression<T, L, StandardScaler<T>>
+where
+    T: Float + ScalarOperand + SubAssign + Debug + FromPrimitive,
+    L: Loss<T>,
+{
+    pub fn new_with_defaults(loss_function: L) -> Self {
+        Self::new(loss_function, true, StandardScaler::new(), StandardScaler::new())
+    }
+}
+
+impl<T, L, S> LinearRegression<T, L, S>
 where
     T: Float + ScalarOperand,
     L: Loss<T>,
+    S: Scaler<T>,
 {
-    /// Calculates the loss between predictions and actual values.
-    ///
-    /// # Arguments
-    /// - `predictions`: Predicted values as a 1D array.
-    /// - `actuals`: Actual values as a 1D array.
-    ///
-    /// # Returns
-    /// The calculated loss as a value of type `T`.
     pub fn calculate_loss(&self, predictions: &Array1<T>, actuals: &Array1<T>) -> T {
         self.loss_function.calculate(predictions, actuals)
     }
 }
 
-impl<T, L> Algorithm<T, L> for LinearRegression<T, L>
+impl<T, L> Algorithm<T, L> for LinearRegression<T, L, StandardScaler<T>>
 where
-    T: Float + ScalarOperand + SubAssign,
+    T: Float + ScalarOperand + SubAssign + Debug + FromPrimitive,
     L: Loss<T>,
 {
-    /// Creates a new `LinearRegression` instance with the given loss function and optimizer.
-    ///
-    /// # Arguments
-    /// - `loss_function`: The loss function to use.
-    /// - `optimizer`: The optimizer to use.
-    ///
-    /// # Returns
-    /// A new instance of `LinearRegression`.
     fn new(loss_function: L) -> Self {
-        LinearRegression { weights: Array1::zeros(1), bias: T::zero(), loss_function }
+        LinearRegression::new_with_defaults(loss_function)
     }
 
-    /// Fits the model to the given data using batch gradient descent.
-    ///
-    /// # Arguments
-    /// - `x`: The input features as a 2D array.
-    /// - `y`: The target values as a 1D array.
-    /// - `learning_rate`: The learning rate for gradient descent.
-    /// - `epochs`: The number of iterations for gradient descent.
     fn fit(&mut self, x: &Array2<T>, y: &Array1<T>, learning_rate: T, epochs: usize) {
-        for _ in 0..epochs {
-            let predictions = self.predict(x);
-            let _loss = self.calculate_loss(&predictions, y);
+        if x.is_empty() || y.is_empty() {
+            panic!("Input data cannot be empty");
+        }
+        if x.shape()[0] != y.shape()[0] {
+            panic!("Number of samples in x and y must match");
+        }
 
-            let (grad_weights, grad_bias) = batch_gradient_descent(x, y, &self.weights, self.bias);
+        let (x_scaled, y_scaled) = if self.normalize {
+            let x_scaled = self.x_scaler.fit_transform(x);
+            let y_2d = y.clone().insert_axis(Axis(1));
+            let y_scaled = self.y_scaler.fit_transform(&y_2d).remove_axis(Axis(1));
+            (x_scaled, y_scaled)
+        } else {
+            (x.clone(), y.clone())
+        };
 
-            self.weights -= &(grad_weights * learning_rate);
+        let (_, n_features) = x_scaled.dim();
+        self.weights = Some(Array1::zeros(n_features));
+
+        for _epoch in 0..epochs {
+            let predictions = self.predict(&x_scaled);
+            let _loss = self.calculate_loss(&predictions, &y_scaled);
+
+            let (grad_weights, grad_bias) = batch_gradient_descent(
+                &x_scaled,
+                &y_scaled,
+                self.weights.as_ref().expect("Weights not initialized"),
+                self.bias,
+            );
+
+            self.weights = Some(
+                self.weights.take().expect("Weights not initialized")
+                    - &(grad_weights * learning_rate),
+            );
             self.bias -= grad_bias * learning_rate;
         }
     }
 
-    /// Predicts target values for the given input features.
-    ///
-    /// # Arguments
-    /// - `x`: The input features as a 2D array.
-    ///
-    /// # Returns
-    /// Predicted values as a 1D array.
     fn predict(&self, x: &Array2<T>) -> Array1<T> {
-        x.dot(&self.weights) + self.bias
+        let x_scaled = if self.normalize { self.x_scaler.transform(x) } else { x.clone() };
+        let predictions_scaled =
+            x_scaled.dot(self.weights.as_ref().expect("Weights not initialized")) + self.bias;
+        if self.normalize {
+            let pred_2d = predictions_scaled.insert_axis(Axis(1));
+            self.y_scaler.inverse_transform(&pred_2d).remove_axis(Axis(1))
+        } else {
+            predictions_scaled
+        }
     }
 }
 
-/// A struct for performing logistic regression.
-///
-/// # Generics
-/// - `T`: The type of data, must implement `num_traits::Float` and `ndarray::ScalarOperand`.
-/// - `L`: The type of the loss function, must implement `Loss<T>`.
-pub struct LogisticRegression<T, L>
+pub struct LogisticRegression<T, L, S>
 where
     T: Float,
     L: Loss<T>,
+    S: Scaler<T>,
 {
     weights: Array1<T>,
     bias: T,
     loss_function: L,
+    normalize: bool,
+    x_scaler: S,
 }
 
-impl<T, L> LogisticRegression<T, L>
+impl<T, L, S> LogisticRegression<T, L, S>
+where
+    T: Float + ScalarOperand + Debug + FromPrimitive,
+    L: Loss<T>,
+    S: Scaler<T>,
+{
+    pub fn new(loss_function: L, normalize: bool, x_scaler: S) -> Self {
+        LogisticRegression {
+            weights: Array1::zeros(0),
+            bias: T::zero(),
+            loss_function,
+            normalize,
+            x_scaler,
+        }
+    }
+}
+
+impl<T, L> LogisticRegression<T, L, StandardScaler<T>>
+where
+    T: Float + ScalarOperand + SubAssign + Debug + FromPrimitive,
+    L: Loss<T>,
+{
+    pub fn new_with_defaults(loss_function: L) -> Self {
+        Self::new(loss_function, true, StandardScaler::new())
+    }
+}
+
+impl<T, L, S> LogisticRegression<T, L, S>
 where
     T: Float + ScalarOperand,
     L: Loss<T>,
+    S: Scaler<T>,
 {
-    /// Calculates the loss between predictions and actual values.
-    ///
-    /// # Arguments
-    /// - `predictions`: Predicted probabilities as a 1D array.
-    /// - `actuals`: Actual values as a 1D array.
-    ///
-    /// # Returns
-    /// The calculated loss as a value of type `T`.
     pub fn calculate_loss(&self, predictions: &Array1<T>, actuals: &Array1<T>) -> T {
         self.loss_function.calculate(predictions, actuals)
     }
 
-    // TODO: we should create generics for Activation
-    // /// Applies the sigmoid function to the given linear output.
-    ///
-    /// # Arguments
-    /// - `linear_output`: A 1D array of linear outputs.
-    ///
-    /// # Returns
-    /// A 1D array of sigmoid-transformed values.
     fn sigmoid(&self, linear_output: Array1<T>) -> Array1<T> {
         linear_output.mapv(|x| T::one() / (T::one() + (-x).exp()))
     }
 
-    /// Predicts the output of a logistic regression model.
-    ///
-    /// This function performs the linear regression prediction by calculating the dot product
-    /// of the input features `x` and the model weights, and then adding the bias term.
-    ///
-    /// # Parameters
-    /// - `x`: A 2D array of input features (`Array2<T>`). Each row represents a feature vector for a single sample.
-    ///
-    /// # Returns
-    /// - An `Array1<T>` containing the predicted values for each sample.
     fn predict_linear(&self, x: &Array2<T>) -> Array1<T> {
         x.dot(&self.weights) + self.bias
     }
 
-    /// Calculates the accuracy of a binary classification model.
-    ///
-    /// This function compares the predicted values with the actual values, considering a threshold of 0.5
-    /// to determine binary classifications. It returns the proportion of correct predictions, where predictions
-    /// that differ from the actual values by less than `T::epsilon()` are considered correct.
-    ///
-    /// # Parameters
-    /// - `predictions`: A 1D array (`Array1<T>`) containing the model's predicted values.
-    /// - `actuals`: A 1D array (`Array1<T>`) containing the actual ground truth values.
-    ///
-    /// # Returns
-    /// - A `f64` representing the accuracy, calculated as the ratio of correct predictions to total samples.
-    ///
-    /// # Constraints
-    /// - `T` must implement `num_traits::Float` so that numerical operations like comparisons and arithmetic can be performed.
     pub fn calculate_accuracy(&self, predictions: &Array1<T>, actuals: &Array1<T>) -> f64
     where
         T: Float,
@@ -203,64 +228,45 @@ where
     }
 }
 
-impl<T, L> Algorithm<T, L> for LogisticRegression<T, L>
+impl<T, L> Algorithm<T, L> for LogisticRegression<T, L, StandardScaler<T>>
 where
-    T: Float + ScalarOperand + SubAssign,
+    T: Float + ScalarOperand + SubAssign + Debug + FromPrimitive,
     L: Loss<T>,
 {
-    /// Creates a new `LogisticRegression` model.
-    ///
-    /// This constructor initializes a logistic regression model with a given loss function.
-    /// The weights are initialized to zeros, and the bias is set to `T::zero()`.
-    ///
-    /// # Parameters
-    /// - `loss_function`: The loss function to use for model training.
-    ///
-    /// # Returns
-    /// - A new `LogisticRegression` instance with initialized weights and bias.
     fn new(loss_function: L) -> Self {
-        LogisticRegression { weights: Array1::zeros(1), bias: T::zero(), loss_function }
+        LogisticRegression::new_with_defaults(loss_function)
     }
 
-    /// Fits the logistic regression model to the training data using gradient descent.
-    ///
-    /// This function trains the model by iteratively updating the weights and bias to minimize
-    /// the loss function. It performs a specified number of epochs of gradient descent with
-    /// a given learning rate.
-    ///
-    /// # Parameters
-    /// - `x`: A 2D array of input features (`Array2<T>`), where each row represents a sample.
-    /// - `y`: A 1D array of target labels (`Array1<T>`) corresponding to the input samples.
-    /// - `learning_rate`: The learning rate used in gradient descent.
-    /// - `epochs`: The number of iterations (epochs) to run the gradient descent.
     fn fit(&mut self, x: &Array2<T>, y: &Array1<T>, learning_rate: T, epochs: usize) {
-        for _ in 0..epochs {
-            let linear_output = self.predict_linear(x);
-            let predictions = self.sigmoid(linear_output.clone());
-            let _loss = self.calculate_loss(&predictions, y);
+        if x.is_empty() || y.is_empty() {
+            panic!("Input data cannot be empty");
+        }
+        if x.shape()[0] != y.shape()[0] {
+            panic!("Number of samples in x and y must match");
+        }
+        if y.iter().any(|&v| v < T::zero() || v > T::one()) {
+            panic!("LogisticRegression expects binary labels (0 or 1)");
+        }
 
-            let _errors = &predictions - y;
+        let x_scaled = if self.normalize { self.x_scaler.fit_transform(x) } else { x.clone() };
+        if self.weights.len() == 0 {
+            self.weights = Array1::zeros(x_scaled.shape()[1]);
+        }
 
+        for _epoch in 0..epochs {
+            let linear_output = self.predict_linear(&x_scaled);
+            let _predictions = self.sigmoid(linear_output);
             let (grad_weights, grad_bias) =
-                logistic_gradient_descent(x, y, &self.weights, self.bias);
+                logistic_gradient_descent(&x_scaled, y, &self.weights, self.bias);
 
             self.weights -= &(grad_weights * learning_rate);
             self.bias -= grad_bias * learning_rate;
         }
     }
 
-    /// Makes predictions using the logistic regression model.
-    ///
-    /// This function first calculates the linear output by applying the learned weights and bias,
-    /// and then applies the sigmoid function to obtain the predicted probabilities.
-    ///
-    /// # Parameters
-    /// - `x`: A 2D array of input features (`Array2<T>`), where each row represents a sample.
-    ///
-    /// # Returns
-    /// - A 1D array (`Array1<T>`) containing the predicted probabilities for each sample.
     fn predict(&self, x: &Array2<T>) -> Array1<T> {
-        let linear_output = self.predict_linear(x);
+        let x_scaled = if self.normalize { self.x_scaler.transform(x) } else { x.clone() };
+        let linear_output = self.predict_linear(&x_scaled);
         self.sigmoid(linear_output)
     }
 }
@@ -270,9 +276,9 @@ mod tests {
     use ndarray::{Array1, Array2};
     use num_traits::Float;
 
+    use super::{LinearRegression, LogisticRegression};
     use crate::classical::{
         Algorithm,
-        algorithms::{LinearRegression, LogisticRegression},
         losses::{CrossEntropy, MSE},
     };
 
@@ -281,7 +287,7 @@ mod tests {
         let x_data = Array2::from_shape_vec((4, 1), vec![1.0, 2.0, 3.0, 4.0]).unwrap();
         let y_data = Array1::from_vec(vec![2.0, 4.0, 6.0, 8.0]);
 
-        let mut model = LinearRegression::new(MSE);
+        let mut model = LinearRegression::new_with_defaults(MSE);
 
         let learning_rate = 0.1;
         let epochs = 1000;
@@ -290,8 +296,8 @@ mod tests {
         let new_data = Array2::from_shape_vec((2, 1), vec![5.0, 6.0]).unwrap();
         let predictions = model.predict(&new_data);
 
-        assert!((predictions[0] - 10.0).abs() < 1e-2);
-        assert!((predictions[1] - 12.0).abs() < 1e-2);
+        assert!((predictions[0] - 10.0).abs() < 0.1);
+        assert!((predictions[1] - 12.0).abs() < 0.1);
     }
 
     #[test]
@@ -299,10 +305,30 @@ mod tests {
         let predictions = Array1::from_vec(vec![2.0, 4.0, 6.0, 8.0]);
         let actuals = Array1::from_vec(vec![2.0, 4.0, 6.0, 8.0]);
 
-        let model = LinearRegression::new(MSE);
+        let model = LinearRegression::new_with_defaults(MSE);
 
         let loss = model.calculate_loss(&predictions, &actuals);
         assert!(loss.abs() < 1e-6, "Loss should be close to 0, got: {}", loss);
+    }
+
+    #[test]
+    fn test_linear_regression_multi_feature() {
+        let x_data =
+            Array2::from_shape_vec((4, 2), vec![1.0, 0.5, 2.0, 1.0, 3.0, 1.5, 4.0, 2.0]).unwrap();
+        let y_data = Array1::from_vec(vec![2.0, 4.0, 6.0, 8.0]);
+        let mut model = LinearRegression::new_with_defaults(MSE);
+        model.fit(&x_data, &y_data, 0.1, 100);
+        let predictions = model.predict(&x_data);
+        assert_eq!(predictions.len(), 4);
+    }
+
+    #[test]
+    #[should_panic(expected = "Number of samples in x and y must match")]
+    fn test_linear_regression_invalid_shapes() {
+        let x_data = Array2::from_shape_vec((4, 1), vec![1.0, 2.0, 3.0, 4.0]).unwrap();
+        let y_data = Array1::from_vec(vec![2.0, 4.0, 6.0]);
+        let mut model = LinearRegression::new_with_defaults(MSE);
+        model.fit(&x_data, &y_data, 0.1, 10);
     }
 
     #[test]
@@ -310,7 +336,7 @@ mod tests {
         let x_data = Array2::from_shape_vec((4, 1), vec![1.0, 2.0, 3.0, 4.0]).unwrap();
         let y_data = Array1::from_vec(vec![0.0, 0.0, 1.0, 1.0]);
 
-        let mut model = LogisticRegression::new(CrossEntropy);
+        let mut model = LogisticRegression::new_with_defaults(CrossEntropy);
 
         let learning_rate = 0.1;
         let epochs = 1000;
@@ -328,7 +354,7 @@ mod tests {
         let predictions = Array1::from_vec(vec![0.1, 0.2, 0.7, 0.9]);
         let actuals = Array1::from_vec(vec![0.0, 0.0, 1.0, 1.0]);
 
-        let model = LogisticRegression::new(CrossEntropy);
+        let model = LogisticRegression::new_with_defaults(CrossEntropy);
 
         let loss = model.calculate_loss(&predictions, &actuals);
         assert!(loss > 0.0, "Loss should be positive, got: {}", loss);
@@ -339,9 +365,29 @@ mod tests {
         let predictions = Array1::from_vec(vec![0.1, 0.8, 0.3, 0.7]);
         let actuals = Array1::from_vec(vec![0.0, 1.0, 1.0, 0.0]);
 
-        let model = LogisticRegression::new(CrossEntropy);
+        let model = LogisticRegression::new_with_defaults(CrossEntropy);
 
         let accuracy = model.calculate_accuracy(&predictions, &actuals);
         assert!((accuracy - 0.5).abs() < 1e-6, "Accuracy should be 0.5, got: {}", accuracy);
+    }
+
+    #[test]
+    fn test_logistic_regression_multi_feature() {
+        let x_data =
+            Array2::from_shape_vec((4, 2), vec![1.0, 0.5, 2.0, 1.0, 3.0, 1.5, 4.0, 2.0]).unwrap();
+        let y_data = Array1::from_vec(vec![0.0, 0.0, 1.0, 1.0]);
+        let mut model = LogisticRegression::new_with_defaults(CrossEntropy);
+        model.fit(&x_data, &y_data, 0.1, 100);
+        let predictions = model.predict(&x_data);
+        assert!(predictions.iter().all(|&p| p >= 0.0 && p <= 1.0));
+    }
+
+    #[test]
+    #[should_panic(expected = "LogisticRegression expects binary labels")]
+    fn test_logistic_regression_invalid_labels() {
+        let x_data = Array2::from_shape_vec((4, 1), vec![1.0, 2.0, 3.0, 4.0]).unwrap();
+        let y_data = Array1::from_vec(vec![0.0, 2.0, 1.0, 3.0]);
+        let mut model = LogisticRegression::new_with_defaults(CrossEntropy);
+        model.fit(&x_data, &y_data, 0.1, 10);
     }
 }

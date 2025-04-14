@@ -29,11 +29,14 @@
 
 pub mod algorithms;
 pub mod losses;
+pub mod scalers;
 
 use std::ops::SubAssign;
 
 use losses::Loss;
 use num_traits::Float;
+
+pub use scalers::{Scaler, StandardScaler};
 
 use ndarray::{Array1, Array2, ScalarOperand};
 

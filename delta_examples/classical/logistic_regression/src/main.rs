@@ -10,7 +10,7 @@ async fn main() {
         load_data::<CsvLoader, _>("../train_data.csv").expect("Failed to load train_data.csv");
 
     // Instantiate the model
-    let mut model = LogisticRegression::new(CrossEntropy);
+    let mut model = LogisticRegression::new_with_defaults(CrossEntropy);
 
     // Train the model
     let learning_rate = 0.01;
