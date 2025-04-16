@@ -147,3 +147,152 @@ impl Optimizer for LogisticGradientDescent {
         Ok((grad_weights, grad_bias))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::errors::OptimizerError;
+    use ndarray::{Array1, Array2, array};
+
+    #[test]
+    fn test_batch_gradient_descent_empty_input() {
+        let optimizer = BatchGradientDescent;
+        let x: Array2<f64> = Array2::zeros((0, 2));
+        let y: Array1<f64> = Array1::zeros(0);
+        let weights = array![1.0, 2.0];
+        let result = optimizer.compute_gradients(&x, &y, &weights, 0.0);
+        assert!(matches!(result, Err(OptimizerError::EmptyInput)));
+    }
+
+    #[test]
+    fn test_batch_gradient_descent_zero_samples() {
+        let optimizer = BatchGradientDescent;
+        let x: Array2<f64> = Array2::zeros((0, 2));
+        let y: Array1<f64> = Array1::zeros(0);
+        let weights = array![1.0, 2.0];
+        let result = optimizer.compute_gradients(&x, &y, &weights, 0.0);
+        assert!(matches!(result, Err(OptimizerError::EmptyInput)));
+    }
+
+    #[test]
+    fn test_batch_gradient_descent_dimension_mismatch_weights() {
+        let optimizer = BatchGradientDescent;
+        let x = array![[1.0, 2.0], [3.0, 4.0]];
+        let y = array![1.0, 2.0];
+        let weights = array![1.0];
+        let result = optimizer.compute_gradients(&x, &y, &weights, 0.0);
+        assert!(matches!(
+            result,
+            Err(OptimizerError::DimensionMismatch { expected: 2, actual: 1 })
+        ));
+    }
+
+    #[test]
+    fn test_batch_gradient_descent_dimension_mismatch_samples() {
+        let optimizer = BatchGradientDescent;
+        let x = array![[1.0, 2.0], [3.0, 4.0]];
+        let y = array![1.0, 2.0, 3.0];
+        let weights = array![1.0, 2.0];
+        let result = optimizer.compute_gradients(&x, &y, &weights, 0.0);
+        assert!(matches!(
+            result,
+            Err(OptimizerError::DimensionMismatch { expected: 2, actual: 3 })
+        ));
+    }
+
+    #[test]
+    fn test_batch_gradient_descent_invalid_numeric_value() {
+        let optimizer = BatchGradientDescent;
+        let x = array![[1.0, f64::NAN], [3.0, 4.0]];
+        let y = array![1.0, 2.0];
+        let weights = array![1.0, 2.0];
+        let result = optimizer.compute_gradients(&x, &y, &weights, 0.0);
+        assert!(matches!(result, Err(OptimizerError::InvalidNumericValue)));
+    }
+
+    #[test]
+    fn test_batch_gradient_descent_valid_computation() {
+        let optimizer = BatchGradientDescent;
+        let x = array![[1.0, 2.0], [3.0, 4.0]];
+        let y = array![1.0, 2.0];
+        let weights = array![0.5, 0.5];
+        let bias = 1.0;
+        let result = optimizer.compute_gradients(&x, &y, &weights, bias);
+        assert!(result.is_ok());
+        let (grad_weights, grad_bias) = result.unwrap();
+        assert_eq!(grad_weights.len(), 2);
+        assert!(grad_weights.iter().all(|&v| v.is_finite()));
+        assert!(grad_bias.is_finite());
+    }
+
+    #[test]
+    fn test_logistic_gradient_descent_empty_input() {
+        let optimizer = LogisticGradientDescent;
+        let x: Array2<f64> = Array2::zeros((0, 2));
+        let y: Array1<f64> = Array1::zeros(0);
+        let weights = array![1.0, 2.0];
+        let result = optimizer.compute_gradients(&x, &y, &weights, 0.0);
+        assert!(matches!(result, Err(OptimizerError::EmptyInput)));
+    }
+
+    #[test]
+    fn test_logistic_gradient_descent_zero_samples() {
+        let optimizer = LogisticGradientDescent;
+        let x: Array2<f64> = Array2::zeros((0, 2));
+        let y: Array1<f64> = Array1::zeros(0);
+        let weights = array![1.0, 2.0];
+        let result = optimizer.compute_gradients(&x, &y, &weights, 0.0);
+        assert!(matches!(result, Err(OptimizerError::EmptyInput)));
+    }
+
+    #[test]
+    fn test_logistic_gradient_descent_dimension_mismatch_weights() {
+        let optimizer = LogisticGradientDescent;
+        let x = array![[1.0, 2.0], [3.0, 4.0]];
+        let y = array![0.0, 1.0];
+        let weights = array![1.0];
+        let result = optimizer.compute_gradients(&x, &y, &weights, 0.0);
+        assert!(matches!(
+            result,
+            Err(OptimizerError::DimensionMismatch { expected: 2, actual: 1 })
+        ));
+    }
+
+    #[test]
+    fn test_logistic_gradient_descent_dimension_mismatch_samples() {
+        let optimizer = LogisticGradientDescent;
+        let x = array![[1.0, 2.0], [3.0, 4.0]];
+        let y = array![0.0, 1.0, 0.0];
+        let weights = array![1.0, 2.0];
+        let result = optimizer.compute_gradients(&x, &y, &weights, 0.0);
+        assert!(matches!(
+            result,
+            Err(OptimizerError::DimensionMismatch { expected: 2, actual: 3 })
+        ));
+    }
+
+    #[test]
+    fn test_logistic_gradient_descent_invalid_numeric_value() {
+        let optimizer = LogisticGradientDescent;
+        let x = array![[1.0, 2.0], [3.0, f64::INFINITY]];
+        let y = array![0.0, 1.0];
+        let weights = array![1.0, 2.0];
+        let result = optimizer.compute_gradients(&x, &y, &weights, 0.0);
+        assert!(matches!(result, Err(OptimizerError::InvalidNumericValue)));
+    }
+
+    #[test]
+    fn test_logistic_gradient_descent_valid_computation() {
+        let optimizer = LogisticGradientDescent;
+        let x = array![[1.0, 2.0], [3.0, 4.0]];
+        let y = array![0.0, 1.0];
+        let weights = array![0.5, 0.5];
+        let bias = 1.0;
+        let result = optimizer.compute_gradients(&x, &y, &weights, bias);
+        assert!(result.is_ok());
+        let (grad_weights, grad_bias) = result.unwrap();
+        assert_eq!(grad_weights.len(), 2);
+        assert!(grad_weights.iter().all(|&v| v.is_finite()));
+        assert!(grad_bias.is_finite());
+    }
+}
