@@ -33,7 +33,7 @@ use std::path::PathBuf;
 
 pub mod algorithms;
 pub mod data;
-pub mod error;
+pub mod errors;
 pub mod losses;
 pub mod optimizers;
 pub mod scalers;

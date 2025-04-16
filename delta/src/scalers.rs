@@ -29,6 +29,8 @@
 
 use ndarray::{Array1, Array2, Axis};
 
+use crate::errors::ScalerError;
+
 #[derive(Clone)]
 pub struct StandardScaler {
     mean: Option<Array1<f64>>,
@@ -40,25 +42,57 @@ impl StandardScaler {
         StandardScaler { mean: None, std: None }
     }
 
-    pub fn fit_transform(&mut self, x: &Array2<f64>) -> Array2<f64> {
-        self.mean = Some(x.mean_axis(Axis(0)).unwrap());
+    pub fn fit_transform(&mut self, x: &Array2<f64>) -> Result<Array2<f64>, ScalerError> {
+        if x.is_empty() {
+            return Err(ScalerError::EmptyInput);
+        }
+
+        if x.ncols() == 0 {
+            return Err(ScalerError::NoFeatures);
+        }
+
+        self.mean = Some(x.mean_axis(Axis(0)).ok_or_else(|| {
+            ScalerError::ArrayOperation(ndarray::ShapeError::from_kind(
+                ndarray::ErrorKind::IncompatibleShape,
+            ))
+        })?);
+
         self.std = Some(
             x.var_axis(Axis(0), 0.0).mapv(|v| v.sqrt()).mapv(|s| if s < 1e-10 { 1.0 } else { s }),
         );
+
         let mean = self.mean.as_ref().unwrap();
         let std = self.std.as_ref().unwrap();
-        (x - mean) / std
+        Ok((x - mean) / std)
     }
 
-    pub fn transform(&self, x: &Array2<f64>) -> Array2<f64> {
-        let mean = self.mean.as_ref().expect("Scaler not fitted");
-        let std = self.std.as_ref().expect("Scaler not fitted");
-        (x - mean) / std
+    pub fn transform(&self, x: &Array2<f64>) -> Result<Array2<f64>, ScalerError> {
+        let mean = self.mean.as_ref().ok_or(ScalerError::NotFitted)?;
+        let std = self.std.as_ref().ok_or(ScalerError::NotFitted)?;
+
+        if x.is_empty() {
+            return Err(ScalerError::EmptyInput);
+        }
+
+        if x.ncols() != mean.len() {
+            return Err(ScalerError::DimensionMismatch { expected: mean.len(), actual: x.ncols() });
+        }
+
+        Ok((x - mean) / std)
     }
 
-    pub fn inverse_transform(&self, x: &Array2<f64>) -> Array2<f64> {
-        let mean = self.mean.as_ref().expect("Scaler not fitted");
-        let std = self.std.as_ref().expect("Scaler not fitted");
-        x * std + mean
+    pub fn inverse_transform(&self, x: &Array2<f64>) -> Result<Array2<f64>, ScalerError> {
+        let mean = self.mean.as_ref().ok_or(ScalerError::NotFitted)?;
+        let std = self.std.as_ref().ok_or(ScalerError::NotFitted)?;
+
+        if x.is_empty() {
+            return Err(ScalerError::EmptyInput);
+        }
+
+        if x.ncols() != mean.len() {
+            return Err(ScalerError::DimensionMismatch { expected: mean.len(), actual: x.ncols() });
+        }
+
+        Ok(x * std + mean)
     }
 }

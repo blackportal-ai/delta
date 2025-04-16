@@ -61,3 +61,48 @@ pub enum CsvError {
     #[error("Failed to parse CSV: {0}")]
     CsvParse(#[from] csv::Error),
 }
+
+#[derive(Error, Debug)]
+pub enum ModelError {
+    #[error("Scaler error: {0}")]
+    Scaler(#[from] ScalerError),
+
+    #[error("Optimizer error: {0}")]
+    Optimizer(#[from] OptimizerError),
+}
+
+#[derive(Error, Debug)]
+pub enum ScalerError {
+    #[error("Input array is empty")]
+    EmptyInput,
+
+    #[error("Input array has no features (zero columns)")]
+    NoFeatures,
+
+    #[error("Scaler not fitted: call fit_transform first")]
+    NotFitted,
+
+    #[error("Dimension mismatch: expected {expected} features, got {actual}")]
+    DimensionMismatch { expected: usize, actual: usize },
+
+    #[error("Array operation failed: {0}")]
+    ArrayOperation(#[from] ndarray::ShapeError),
+}
+
+#[derive(Error, Debug)]
+pub enum OptimizerError {
+    #[error("Input array is empty")]
+    EmptyInput,
+
+    #[error("Zero samples provided")]
+    ZeroSamples,
+
+    #[error("Dimension mismatch: expected {expected}, got {actual}")]
+    DimensionMismatch { expected: usize, actual: usize },
+
+    #[error("Invalid numeric value (NaN or Inf) detected")]
+    InvalidNumericValue,
+
+    #[error("Numerical instability in gradient computation")]
+    NumericalInstability,
+}

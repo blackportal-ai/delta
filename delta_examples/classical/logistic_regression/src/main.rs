@@ -7,7 +7,7 @@ use deltaml::{
 };
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Using Breast Cancer Wisconsin (Diagnostic) dataset from UCI (already prepared with splits)
     let (x_train, y_train) =
         load_data::<CsvLoader, _>("../train_data.csv").expect("Failed to load train_data.csv");
@@ -25,10 +25,10 @@ async fn main() {
     // Train the model
     let learning_rate = 0.01;
     let epochs = 1000;
-    model.fit(&x_train, &y_train, learning_rate, epochs);
+    model.fit(&x_train, &y_train, learning_rate, epochs)?;
 
     // Make predictions with the trained model
-    let predictions = model.predict(&x_test);
+    let predictions = model.predict(&x_test)?;
 
     println!("Predictions for new data (probabilities): {:?}", predictions);
 
@@ -39,4 +39,6 @@ async fn main() {
     // Calculate accuracy
     // let accuracy = model.calculate_accuracy(&predictions, &y_test);
     // println!("Accuracy: {:.2}%", accuracy * 100.0);
+
+    Ok(())
 }

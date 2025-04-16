@@ -32,7 +32,7 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::path::Path;
 
-use super::error::CsvError;
+use super::errors::CsvError;
 
 pub struct CsvLoader;
 pub struct CsvHeadersLoader;
