@@ -108,6 +108,35 @@ impl LossFunction for CrossEntropy {
     }
 }
 
+pub struct MAE;
+
+impl LossFunction for MAE {
+    fn calculate(
+        &self,
+        predictions: &Array1<f64>,
+        actuals: &Array1<f64>,
+    ) -> Result<f64, LossError> {
+        if predictions.is_empty() || actuals.is_empty() {
+            return Err(LossError::EmptyInput);
+        }
+
+        if predictions.len() != actuals.len() {
+            return Err(LossError::DimensionMismatch {
+                expected: predictions.len(),
+                actual: actuals.len(),
+            });
+        }
+
+        if predictions.iter().any(|&v| !v.is_finite()) || actuals.iter().any(|&v| !v.is_finite()) {
+            return Err(LossError::InvalidNumericValue);
+        }
+
+        let diff = (predictions - actuals).mapv(|x| x.abs());
+        let mae = diff.mean().ok_or(LossError::EmptyInput)?;
+        Ok(mae)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -206,5 +235,43 @@ mod tests {
         let log_loss = result.unwrap();
         assert!(log_loss > 0.0);
         assert!(log_loss.is_finite());
+    }
+
+    #[test]
+    fn mae_empty_input() {
+        let loss = MAE;
+        let predictions: Array1<f64> = Array1::zeros(0);
+        let actuals = array![1.0];
+        let result = loss.calculate(&predictions, &actuals);
+        assert!(matches!(result, Err(LossError::EmptyInput)));
+    }
+
+    #[test]
+    fn mae_dimension_mismatch() {
+        let loss = MAE;
+        let predictions = array![1.0, 2.0];
+        let actuals = array![1.0, 2.0, 3.0];
+        let result = loss.calculate(&predictions, &actuals);
+        assert!(matches!(result, Err(LossError::DimensionMismatch { expected: 2, actual: 3 })));
+    }
+
+    #[test]
+    fn mae_invalid_numeric_value() {
+        let loss = MAE;
+        let predictions = array![1.0, f64::NAN];
+        let actuals = array![1.0, 2.0];
+        let result = loss.calculate(&predictions, &actuals);
+        assert!(matches!(result, Err(LossError::InvalidNumericValue)));
+    }
+
+    #[test]
+    fn mae_valid_computation() {
+        let loss = MAE;
+        let predictions = array![1.0, 2.0, 3.0];
+        let actuals = array![1.1, 2.1, 3.1];
+        let result = loss.calculate(&predictions, &actuals);
+        assert!(result.is_ok());
+        let mae = result.unwrap();
+        assert!((mae - 0.1).abs() < 1e-6);
     }
 }
