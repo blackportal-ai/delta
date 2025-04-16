@@ -107,3 +107,104 @@ impl LossFunction for CrossEntropy {
         Ok(log_loss)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ndarray::{Array1, array};
+
+    #[test]
+    fn test_mse_empty_input() {
+        let loss = MSE;
+        let predictions: Array1<f64> = Array1::zeros(0);
+        let actuals = array![1.0];
+        let result = loss.calculate(&predictions, &actuals);
+        assert!(matches!(result, Err(LossError::EmptyInput)));
+    }
+
+    #[test]
+    fn test_mse_dimension_mismatch() {
+        let loss = MSE;
+        let predictions = array![1.0, 2.0];
+        let actuals = array![1.0, 2.0, 3.0];
+        let result = loss.calculate(&predictions, &actuals);
+        assert!(matches!(result, Err(LossError::DimensionMismatch { expected: 2, actual: 3 })));
+    }
+
+    #[test]
+    fn test_mse_invalid_numeric_value() {
+        let loss = MSE;
+        let predictions = array![1.0, f64::NAN];
+        let actuals = array![1.0, 2.0];
+        let result = loss.calculate(&predictions, &actuals);
+        assert!(matches!(result, Err(LossError::InvalidNumericValue)));
+    }
+
+    #[test]
+    fn test_mse_valid_computation() {
+        let loss = MSE;
+        let predictions = array![1.0, 2.0, 3.0];
+        let actuals = array![1.1, 2.1, 3.1];
+        let result = loss.calculate(&predictions, &actuals);
+        assert!(result.is_ok());
+        let mse = result.unwrap();
+        assert!((mse - 0.01).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_cross_entropy_empty_input() {
+        let loss = CrossEntropy;
+        let predictions = Array1::zeros(0);
+        let actuals = array![0.0];
+        let result = loss.calculate(&predictions, &actuals);
+        assert!(matches!(result, Err(LossError::EmptyInput)));
+    }
+
+    #[test]
+    fn test_cross_entropy_dimension_mismatch() {
+        let loss = CrossEntropy;
+        let predictions = array![0.1, 0.9];
+        let actuals = array![0.0, 1.0, 0.0];
+        let result = loss.calculate(&predictions, &actuals);
+        assert!(matches!(result, Err(LossError::DimensionMismatch { expected: 2, actual: 3 })));
+    }
+
+    #[test]
+    fn test_cross_entropy_invalid_numeric_value() {
+        let loss = CrossEntropy;
+        let predictions = array![0.1, f64::INFINITY];
+        let actuals = array![0.0, 1.0];
+        let result = loss.calculate(&predictions, &actuals);
+        assert!(matches!(result, Err(LossError::InvalidNumericValue)));
+    }
+
+    #[test]
+    fn test_cross_entropy_invalid_prediction_range() {
+        let loss = CrossEntropy;
+        let predictions = array![0.1, 1.1];
+        let actuals = array![0.0, 1.0];
+        let result = loss.calculate(&predictions, &actuals);
+        assert!(matches!(result, Err(LossError::InvalidPredictionRange)));
+    }
+
+    #[test]
+    fn test_cross_entropy_invalid_actual_value() {
+        let loss = CrossEntropy;
+        let predictions = array![0.1, 0.9];
+        let actuals = array![0.0, 2.0];
+        let result = loss.calculate(&predictions, &actuals);
+        assert!(matches!(result, Err(LossError::InvalidActualValue)));
+    }
+
+    #[test]
+    fn test_cross_entropy_valid_computation() {
+        let loss = CrossEntropy;
+        let predictions = array![0.1, 0.9];
+        let actuals = array![0.0, 1.0];
+        let result = loss.calculate(&predictions, &actuals);
+        assert!(result.is_ok());
+        let log_loss = result.unwrap();
+        assert!(log_loss > 0.0);
+        assert!(log_loss.is_finite());
+    }
+}
