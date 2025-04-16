@@ -167,6 +167,7 @@ impl LinearRegression {
         self.loss_function.calculate(predictions, actuals)
     }
 
+    #[inline(always)]
     fn predict_linear(&self, x: &Array2<f64>) -> Array1<f64> {
         let weights = self.weights.as_ref().expect("Model not fitted");
         x.dot(weights) + self.bias
@@ -288,10 +289,12 @@ impl LogisticRegression {
         self.loss_function.calculate(predictions, actuals)
     }
 
+    #[inline(always)]
     fn predict_linear(&self, x: &Array2<f64>) -> Array1<f64> {
         x.dot(&self.weights) + self.bias
     }
 
+    #[inline(always)]
     fn sigmoid(&self, z: &Array1<f64>) -> Array1<f64> {
         z.mapv(|x| 1.0 / (1.0 + (-x).exp()))
     }
