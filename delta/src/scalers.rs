@@ -97,6 +97,54 @@ impl StandardScaler {
     }
 }
 
+pub struct MinMaxScaler {
+    min: Option<Array1<f64>>,
+    max: Option<Array1<f64>>,
+    feature_range: (f64, f64),
+}
+
+impl MinMaxScaler {
+    pub fn new() -> Self {
+        MinMaxScaler { min: None, max: None, feature_range: (0.0, 1.0) }
+    }
+
+    pub fn fit_transform(&mut self, x: &Array2<f64>) -> Result<Array2<f64>, ScalerError> {
+        if x.ncols() == 0 {
+            return Err(ScalerError::NoFeatures);
+        }
+        if x.is_empty() {
+            return Err(ScalerError::EmptyInput);
+        }
+
+        // Compute min and max for each column
+        let mut min = Array1::from_elem(x.ncols(), f64::INFINITY);
+        let mut max = Array1::from_elem(x.ncols(), f64::NEG_INFINITY);
+
+        for (col_idx, col) in x.axis_iter(Axis(1)).enumerate() {
+            for &val in col.iter() {
+                if !val.is_finite() {
+                    return Err(ScalerError::InvalidNumericValue);
+                }
+                min[col_idx] = min[col_idx].min(val);
+                max[col_idx] = max[col_idx].max(val);
+            }
+        }
+
+        self.min = Some(min);
+        self.max = Some(max);
+        self.transform(x)
+    }
+
+    pub fn transform(&self, x: &Array2<f64>) -> Result<Array2<f64>, ScalerError> {
+        let min = self.min.as_ref().ok_or(ScalerError::NotFitted)?;
+        let max = self.max.as_ref().ok_or(ScalerError::NotFitted)?;
+        let range_min = self.feature_range.0;
+        let range_max = self.feature_range.1;
+        let scale = (range_max - range_min) / (max - min).mapv(|v| if v < 1e-10 { 1.0 } else { v });
+        Ok((x - min) * &scale + range_min)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -223,5 +271,104 @@ mod tests {
         for (orig, unscaled) in x_train.iter().zip(unscaled.iter()) {
             assert!((orig - unscaled).abs() < 1e-10);
         }
+    }
+
+    #[test]
+    fn minmax_scaler_constant_feature() {
+        let mut scaler = MinMaxScaler::new();
+        let x = array![[1.0, 2.0], [1.0, 2.0], [1.0, 2.0]];
+        let result = scaler.fit_transform(&x);
+        assert!(result.is_ok());
+        let scaled = result.unwrap();
+        assert_eq!(scaled.shape(), [3, 2]);
+        // Constant features should map to range_min (0.0) since min = max
+        assert!(scaled.iter().all(|&v| (v - 0.0).abs() < 1e-10));
+    }
+
+    #[test]
+    fn minmax_scaler_custom_feature_range() {
+        let mut scaler = MinMaxScaler { feature_range: (-1.0, 1.0), ..MinMaxScaler::new() };
+        let x = array![[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]];
+        let result = scaler.fit_transform(&x);
+        assert!(result.is_ok());
+        let scaled = result.unwrap();
+        assert_eq!(scaled.shape(), [3, 2]);
+        assert!(scaled.iter().all(|&v| (-1.0..=1.0).contains(&v)));
+        // First column: [1.0, 3.0, 5.0] -> [-1.0, 0.0, 1.0]
+        assert!((scaled[[0, 0]] - -1.0).abs() < 1e-10);
+        assert!((scaled[[1, 0]] - 0.0).abs() < 1e-10);
+        assert!((scaled[[2, 0]] - 1.0).abs() < 1e-10);
+        // Second column: [2.0, 4.0, 6.0] -> [-1.0, 0.0, 1.0]
+        assert!((scaled[[0, 1]] - -1.0).abs() < 1e-10);
+        assert!((scaled[[1, 1]] - 0.0).abs() < 1e-10);
+        assert!((scaled[[2, 1]] - 1.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn minmax_scaler_single_row() {
+        let mut scaler = MinMaxScaler::new();
+        let x = array![[1.0, 2.0]];
+        let result = scaler.fit_transform(&x);
+        assert!(result.is_ok());
+        let scaled = result.unwrap();
+        assert_eq!(scaled.shape(), [1, 2]);
+        // Single value per feature maps to range_min (0.0) since min = max
+        assert!(scaled.iter().all(|&v| (v - 0.0).abs() < 1e-10));
+    }
+
+    #[test]
+    fn minmax_scaler_large_values() {
+        let mut scaler = MinMaxScaler::new();
+        let x = array![[1e10, 2.0], [1.5e10, 3.0], [2e10, 4.0]];
+        let result = scaler.fit_transform(&x);
+        assert!(result.is_ok());
+        let scaled = result.unwrap();
+        assert_eq!(scaled.shape(), [3, 2]);
+        assert!(scaled.iter().all(|&v| (0.0..=1.0).contains(&v) && v.is_finite()));
+        // First column: [1e10, 1.5e10, 2e10] -> [0.0, 0.5, 1.0]
+        assert!((scaled[[0, 0]] - 0.0).abs() < 1e-10);
+        assert!((scaled[[1, 0]] - 0.5).abs() < 1e-10);
+        assert!((scaled[[2, 0]] - 1.0).abs() < 1e-10);
+        // Second column: [2.0, 3.0, 4.0] -> [0.0, 0.5, 1.0]
+        assert!((scaled[[0, 1]] - 0.0).abs() < 1e-10);
+        assert!((scaled[[1, 1]] - 0.5).abs() < 1e-10);
+        assert!((scaled[[2, 1]] - 1.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn minmax_scaler_transform_after_fit() {
+        let mut scaler = MinMaxScaler::new();
+        let x_train = array![[0.0, 1.0], [2.0, 3.0]];
+        scaler.fit_transform(&x_train).unwrap();
+        let x_test = array![[1.0, 2.0], [3.0, 4.0]];
+        let result = scaler.transform(&x_test);
+        assert!(result.is_ok());
+        let transformed = result.unwrap();
+        assert_eq!(transformed.shape(), [2, 2]);
+        // First column: [0.0, 2.0] range, test [1.0, 3.0] -> [0.5, 1.5]
+        assert!((transformed[[0, 0]] - 0.5).abs() < 1e-10); // (1.0 - 0.0)/(2.0 - 0.0)
+        assert!((transformed[[1, 0]] - 1.5).abs() < 1e-10); // (3.0 - 0.0)/(2.0 - 0.0)
+        // Second column: [1.0, 3.0] range, test [2.0, 4.0] -> [0.5, 1.5]
+        assert!((transformed[[0, 1]] - 0.5).abs() < 1e-10); // (2.0 - 1.0)/(3.0 - 1.0)
+        assert!((transformed[[1, 1]] - 1.5).abs() < 1e-10); // (4.0 - 1.0)/(3.0 - 1.0)
+    }
+
+    #[test]
+    fn minmax_scaler_negative_values() {
+        let mut scaler = MinMaxScaler::new();
+        let x = array![[-1.0, -2.0], [0.0, -1.0], [1.0, 0.0]];
+        let result = scaler.fit_transform(&x);
+        assert!(result.is_ok());
+        let scaled = result.unwrap();
+        assert_eq!(scaled.shape(), [3, 2]);
+        assert!(scaled.iter().all(|&v| (0.0..=1.0).contains(&v)));
+        // First column: [-1.0, 0.0, 1.0] -> [0.0, 0.5, 1.0]
+        assert!((scaled[[0, 0]] - 0.0).abs() < 1e-10);
+        assert!((scaled[[1, 0]] - 0.5).abs() < 1e-10);
+        assert!((scaled[[2, 0]] - 1.0).abs() < 1e-10);
+        // Second column: [-2.0, -1.0, 0.0] -> [0.0, 0.5, 1.0]
+        assert!((scaled[[0, 1]] - 0.0).abs() < 1e-10);
+        assert!((scaled[[1, 1]] - 0.5).abs() < 1e-10);
+        assert!((scaled[[2, 1]] - 1.0).abs() < 1e-10);
     }
 }

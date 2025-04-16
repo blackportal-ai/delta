@@ -88,6 +88,9 @@ pub enum ScalerError {
     #[error("Dimension mismatch: expected {expected} features, got {actual}")]
     DimensionMismatch { expected: usize, actual: usize },
 
+    #[error("Invalid numeric value (NaN or Inf) detected")]
+    InvalidNumericValue,
+
     #[error("Array operation failed: {0}")]
     ArrayOperation(#[from] ndarray::ShapeError),
 }
