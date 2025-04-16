@@ -1,7 +1,9 @@
 use deltaml::{
-    algorithms::{Algorithm, LogisticRegression},
+    algorithms::LogisticRegression,
     data::{CsvLoader, load_data},
     losses::CrossEntropy,
+    optimizers::LogisticGradientDescent,
+    scalers::StandardScaler,
 };
 
 #[tokio::main]
@@ -13,7 +15,12 @@ async fn main() {
         load_data::<CsvLoader, _>("../test_data.csv").expect("Failed to load test_data.csv");
 
     // Instantiate the model
-    let mut model = LogisticRegression::new_with_defaults(CrossEntropy);
+    let mut model = LogisticRegression::new()
+        .optimizer(LogisticGradientDescent)
+        .loss_function(CrossEntropy)
+        .scaler(StandardScaler::new())
+        .normalize(true)
+        .build();
 
     // Train the model
     let learning_rate = 0.01;
@@ -30,6 +37,6 @@ async fn main() {
     println!("Test Loss after training: {:.6}", test_loss);
 
     // Calculate accuracy
-    let accuracy = model.calculate_accuracy(&predictions, &y_test);
-    println!("Accuracy: {:.2}%", accuracy * 100.0);
+    // let accuracy = model.calculate_accuracy(&predictions, &y_test);
+    // println!("Accuracy: {:.2}%", accuracy * 100.0);
 }

@@ -27,62 +27,33 @@
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::iter::Sum;
+use ndarray::Array1;
 
-use ndarray::{Array1, ScalarOperand};
-use num_traits::Float;
+pub trait LossFunction {
+    fn calculate(&self, predictions: &Array1<f64>, actuals: &Array1<f64>) -> f64;
+}
 
-#[derive(Clone)]
 pub struct MSE;
 
-#[derive(Clone)]
+impl LossFunction for MSE {
+    fn calculate(&self, predictions: &Array1<f64>, actuals: &Array1<f64>) -> f64 {
+        let diff = predictions - actuals;
+        diff.mapv(|x| x * x).mean().unwrap_or(0.0)
+    }
+}
+
 pub struct CrossEntropy;
 
-#[derive(Clone)]
-pub struct MAE;
-
-pub trait Loss<T> {
-    fn calculate(&self, predictions: &Array1<T>, actuals: &Array1<T>) -> T;
-}
-
-impl<T> Loss<T> for MSE
-where
-    T: Float,
-{
-    fn calculate(&self, predictions: &Array1<T>, actuals: &Array1<T>) -> T {
-        let m = T::from(predictions.len()).unwrap();
-        let diff = predictions - actuals;
-        (diff.mapv(|x| x.powi(2)).sum()) / m
-    }
-}
-
-impl<T> Loss<T> for CrossEntropy
-where
-    T: Float + ScalarOperand + Sum,
-{
-    fn calculate(&self, predictions: &Array1<T>, actuals: &Array1<T>) -> T {
-        let m = T::from(predictions.len()).unwrap();
-        let epsilon = T::from(1e-15).unwrap();
-
-        predictions
+impl LossFunction for CrossEntropy {
+    fn calculate(&self, predictions: &Array1<f64>, actuals: &Array1<f64>) -> f64 {
+        let epsilon = 1e-15;
+        let clipped_preds = predictions.mapv(|x| x.max(epsilon).min(1.0 - epsilon));
+        let log_loss = actuals
             .iter()
-            .zip(actuals.iter())
-            .map(|(p, y)| {
-                let p_clamped = p.max(epsilon).min(T::one() - epsilon);
-                -(*y * p_clamped.ln() + (T::one() - *y) * (T::one() - p_clamped).ln())
-            })
-            .sum::<T>()
-            / m
-    }
-}
-
-impl<T> Loss<T> for MAE
-where
-    T: Float,
-{
-    fn calculate(&self, predictions: &Array1<T>, actuals: &Array1<T>) -> T {
-        let m = T::from(predictions.len()).unwrap();
-        let diff = predictions - actuals;
-        (diff.mapv(|x| x.abs()).sum()) / m
+            .zip(clipped_preds.iter())
+            .map(|(&y, &p)| -y * p.ln() - (1.0 - y) * (1.0 - p).ln())
+            .sum::<f64>()
+            / actuals.len() as f64;
+        log_loss
     }
 }

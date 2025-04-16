@@ -27,26 +27,51 @@
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-extern crate core;
+use ndarray::{Array1, Array2};
 
-use std::path::PathBuf;
-
-pub mod algorithms;
-pub mod data;
-pub mod error;
-pub mod losses;
-pub mod optimizers;
-pub mod scalers;
-
-// Re-exports for convenience
-pub mod ndarray {
-    pub use ndarray::*;
+pub trait Optimizer {
+    fn compute_gradients(
+        &self,
+        x: &Array2<f64>,
+        y: &Array1<f64>,
+        weights: &Array1<f64>,
+        bias: f64,
+    ) -> (Array1<f64>, f64);
 }
 
-pub fn get_workspace_dir() -> PathBuf {
-    // Add a default for flamegraph's to work
-    let path = std::env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".to_string());
-    let mut path = PathBuf::from(path);
-    path.pop();
-    path
+pub struct BatchGradientDescent;
+
+impl Optimizer for BatchGradientDescent {
+    fn compute_gradients(
+        &self,
+        x: &Array2<f64>,
+        y: &Array1<f64>,
+        weights: &Array1<f64>,
+        bias: f64,
+    ) -> (Array1<f64>, f64) {
+        let predictions = x.dot(weights) + bias;
+        let errors = &predictions - y;
+        let grad_weights = x.t().dot(&errors) / x.shape()[0] as f64;
+        let grad_bias = errors.mean().unwrap_or(0.0);
+        (grad_weights, grad_bias)
+    }
+}
+
+pub struct LogisticGradientDescent;
+
+impl Optimizer for LogisticGradientDescent {
+    fn compute_gradients(
+        &self,
+        x: &Array2<f64>,
+        y: &Array1<f64>,
+        weights: &Array1<f64>,
+        bias: f64,
+    ) -> (Array1<f64>, f64) {
+        let linear_output = x.dot(weights) + bias;
+        let predictions = linear_output.mapv(|z| 1.0 / (1.0 + (-z).exp()));
+        let errors = &predictions - y;
+        let grad_weights = x.t().dot(&errors) / x.shape()[0] as f64;
+        let grad_bias = errors.mean().unwrap_or(0.0);
+        (grad_weights, grad_bias)
+    }
 }

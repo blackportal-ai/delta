@@ -1,7 +1,9 @@
 use deltaml::{
-    algorithms::{Algorithm, LinearRegression},
+    algorithms::LinearRegression,
     data::{CsvHeadersLoader, load_data},
     losses::MSE,
+    optimizers::BatchGradientDescent,
+    scalers::StandardScaler,
 };
 
 #[tokio::main]
@@ -13,7 +15,12 @@ async fn main() {
         load_data::<CsvHeadersLoader, _>("../test_data.csv").expect("Failed to load test_data.csv");
 
     // Instantiate the model
-    let mut model = LinearRegression::new_with_defaults(MSE);
+    let mut model = LinearRegression::new()
+        .optimizer(BatchGradientDescent)
+        .loss_function(MSE)
+        .scaler(StandardScaler::new())
+        .normalize(true)
+        .build();
 
     // Train the model
     let learning_rate = 0.01;

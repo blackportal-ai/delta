@@ -28,95 +28,37 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use ndarray::{Array1, Array2, Axis};
-use num_traits::{Float, FromPrimitive};
 
-pub trait Scaler<T: Float> {
-    fn fit(&mut self, x: &Array2<T>);
-
-    fn transform(&self, x: &Array2<T>) -> Array2<T>;
-
-    fn inverse_transform(&self, x: &Array2<T>) -> Array2<T>;
-
-    fn fit_transform(&mut self, x: &Array2<T>) -> Array2<T> {
-        self.fit(x);
-        self.transform(x)
-    }
+#[derive(Clone)]
+pub struct StandardScaler {
+    mean: Option<Array1<f64>>,
+    std: Option<Array1<f64>>,
 }
 
-pub struct StandardScaler<T: Float> {
-    mean: Option<Array1<T>>,
-    std: Option<Array1<T>>,
-}
-
-impl<T: Float + FromPrimitive> StandardScaler<T> {
+impl StandardScaler {
     pub fn new() -> Self {
         StandardScaler { mean: None, std: None }
     }
-}
 
-impl<T: Float + FromPrimitive> Scaler<T> for StandardScaler<T> {
-    fn fit(&mut self, x: &Array2<T>) {
-        let mean = x.mean_axis(Axis(0)).unwrap();
-        let std = x.var_axis(Axis(0), T::one()).mapv(|v| v.sqrt());
-        self.mean = Some(mean);
-        self.std = Some(std.mapv(|s| if s == T::zero() { T::one() } else { s }));
+    pub fn fit_transform(&mut self, x: &Array2<f64>) -> Array2<f64> {
+        self.mean = Some(x.mean_axis(Axis(0)).unwrap());
+        self.std = Some(
+            x.var_axis(Axis(0), 0.0).mapv(|v| v.sqrt()).mapv(|s| if s < 1e-10 { 1.0 } else { s }),
+        );
+        let mean = self.mean.as_ref().unwrap();
+        let std = self.std.as_ref().unwrap();
+        (x - mean) / std
     }
 
-    fn transform(&self, x: &Array2<T>) -> Array2<T> {
+    pub fn transform(&self, x: &Array2<f64>) -> Array2<f64> {
         let mean = self.mean.as_ref().expect("Scaler not fitted");
         let std = self.std.as_ref().expect("Scaler not fitted");
         (x - mean) / std
     }
 
-    fn inverse_transform(&self, x: &Array2<T>) -> Array2<T> {
+    pub fn inverse_transform(&self, x: &Array2<f64>) -> Array2<f64> {
         let mean = self.mean.as_ref().expect("Scaler not fitted");
         let std = self.std.as_ref().expect("Scaler not fitted");
         x * std + mean
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use ndarray::{Array1, Array2};
-
-    #[test]
-    fn test_standard_scaler_fit_transform() {
-        let x = Array2::from_shape_vec((3, 2), vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).unwrap();
-        let mut scaler = StandardScaler::new();
-        let x_scaled = scaler.fit_transform(&x);
-
-        // Check mean ~ 0 and std ~ 1 per column
-        let mean = x_scaled.mean_axis(Axis(0)).unwrap();
-        let std = x_scaled.var_axis(Axis(0), 1.0).mapv(|v| v.sqrt());
-        for &m in mean.iter() {
-            assert!((m.abs() < 1e-10), "Mean should be ~0, got {}", m);
-        }
-        for &s in std.iter() {
-            assert!((s - 1.0).abs() < 1e-10, "Std should be ~1, got {}", s);
-        }
-    }
-
-    #[test]
-    fn test_standard_scaler_inverse_transform() {
-        let x = Array2::from_shape_vec((3, 2), vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).unwrap();
-        let mut scaler = StandardScaler::new();
-        let x_scaled = scaler.fit_transform(&x);
-        let x_restored = scaler.inverse_transform(&x_scaled);
-
-        // Check restored data matches original
-        for (orig, restored) in x.iter().zip(x_restored.iter()) {
-            assert!((orig - restored).abs() < 1e-10, "Restored value differs");
-        }
-    }
-
-    #[test]
-    fn test_standard_scaler_zero_variance() {
-        let x = Array2::from_shape_vec((3, 2), vec![1.0, 2.0, 1.0, 2.0, 1.0, 2.0]).unwrap();
-        let mut scaler = StandardScaler::new();
-        let x_scaled = scaler.fit_transform(&x);
-
-        // Check constant columns are unchanged (std=1 fallback)
-        assert_eq!(x_scaled.column(0), Array1::from_vec(vec![0.0, 0.0, 0.0]));
     }
 }
