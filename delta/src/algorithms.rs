@@ -128,9 +128,10 @@ impl LinearRegression {
         let (_, n_features) = x_scaled.dim();
         self.weights = Some(Array1::zeros(n_features));
 
-        for _epoch in 0..epochs {
-            let predictions = self.predict_linear(&x_scaled);
-            let _loss = self.loss_function.calculate(&predictions, &y_scaled)?;
+        for _ in 0..epochs {
+            // These are commented out temporarily until we will store the predictions and loss for metrics
+            // let predictions = self.predict_linear(&x_scaled);
+            // let _loss = self.loss_function.calculate(&predictions, &y_scaled)?;
 
             let (grad_weights, grad_bias) = self.optimizer.compute_gradients(
                 &x_scaled,
@@ -261,10 +262,11 @@ impl LogisticRegression {
             self.weights = Array1::zeros(x_scaled.shape()[1]);
         }
 
-        for _epoch in 0..epochs {
-            let linear_output = self.predict_linear(&x_scaled);
-            let predictions = self.sigmoid(&linear_output);
-            let _loss = self.loss_function.calculate(&predictions, y)?;
+        for _ in 0..epochs {
+            // These are commented out temporarily until we will store the predictions and loss for metrics
+            // let linear_output = self.predict_linear(&x_scaled);
+            // let predictions = self.sigmoid(&linear_output);
+            // let _loss = self.loss_function.calculate(&predictions, y)?;
 
             let (grad_weights, grad_bias) =
                 self.optimizer.compute_gradients(&x_scaled, y, &self.weights, self.bias)?;
