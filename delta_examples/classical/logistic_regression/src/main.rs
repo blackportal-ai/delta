@@ -37,6 +37,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Test Loss after training: {:.6}", test_loss);
 
     // Calculate accuracy
+    // Will be implemented in the next version of Delta
     // let accuracy = model.calculate_accuracy(&predictions, &y_test);
     // println!("Accuracy: {:.2}%", accuracy * 100.0);
 
