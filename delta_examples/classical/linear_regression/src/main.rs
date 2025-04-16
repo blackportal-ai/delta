@@ -1,6 +1,7 @@
 use deltaml::{
-    classical::{Algorithm, algorithms::LinearRegression, losses::MSE},
+    algorithms::{Algorithm, LinearRegression},
     data::{CsvHeadersLoader, load_data},
+    losses::MSE,
 };
 
 #[tokio::main]

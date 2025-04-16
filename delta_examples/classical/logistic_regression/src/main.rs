@@ -1,6 +1,7 @@
 use deltaml::{
-    classical::{Algorithm, algorithms::LogisticRegression, losses::CrossEntropy},
+    algorithms::{Algorithm, LogisticRegression},
     data::{CsvLoader, load_data},
+    losses::CrossEntropy,
 };
 
 #[tokio::main]

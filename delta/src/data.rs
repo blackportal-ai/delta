@@ -27,7 +27,6 @@
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use crate::data::DataLoader;
 use ndarray::{Array1, Array2};
 use std::collections::HashMap;
 use std::fs::File;
@@ -35,47 +34,20 @@ use std::path::Path;
 
 use super::error::CsvError;
 
-/// Loads a CSV file without headers into a feature matrix and target vector.
-///
-/// This struct implements the `DataLoader` trait to parse CSV files where all rows
-/// are treated as data rows. It processes the file into a 2D feature array (`Array2<f64>`)
-/// and a 1D target array (`Array1<f64>`), with the last column designated as the target.
-/// Numeric values (integers or floats) are parsed directly into `f64`, while non-numeric
-/// strings in feature columns are treated as categorical and label-encoded into `f64`
-/// values based on their order of appearance. Missing values are imputed as `0.0` for
-/// numeric columns and as the string `"missing"` for categorical columns, which is then
-/// encoded accordingly.
-///
-/// # Notes
-/// - The target column must contain numeric values parseable as `f64`.
-/// - Categorical encoding is order-dependent and consistent within a single load operation.
-/// - All rows must have the same number of columns.
-///
-/// # Errors
-/// Returns a `CsvError` if the file cannot be opened, is empty, has fewer than two columns,
-/// contains inconsistent column counts, or has invalid numeric or target values.
 pub struct CsvLoader;
-
-/// Loads a CSV file with headers into a feature matrix and target vector.
-///
-/// This struct implements the `DataLoader` trait to parse CSV files where the first row
-/// is treated as a header and skipped. The remaining rows are processed into a 2D feature
-/// array (`Array2<f64>`) and a 1D target array (`Array1<f64>`), with the last column
-/// designated as the target. Numeric values (integers or floats) are parsed directly into
-/// `f64`, while non-numeric strings in feature columns are treated as categorical and
-/// label-encoded into `f64` values based on their order of appearance. Missing values are
-/// imputed as `0.0` for numeric columns and as the string `"missing"` for categorical
-/// columns, which is then encoded accordingly.
-///
-/// # Notes
-/// - The target column must contain numeric values parseable as `f64`.
-/// - Categorical encoding is order-dependent and consistent within a single load operation.
-/// - All data rows (excluding the header) must have the same number of columns as the header.
-///
-/// # Errors
-/// Returns a `CsvError` if the file cannot be opened, is empty, has fewer than two columns,
-/// contains inconsistent column counts, or has invalid numeric or target values.
 pub struct CsvHeadersLoader;
+
+pub trait DataLoader {
+    fn load<P: AsRef<std::path::Path>>(path: P) -> Result<(Array2<f64>, Array1<f64>), Self::Error>;
+
+    type Error: std::error::Error + 'static;
+}
+
+pub fn load_data<T: DataLoader, P: AsRef<std::path::Path>>(
+    path: P,
+) -> Result<(Array2<f64>, Array1<f64>), T::Error> {
+    T::load(path)
+}
 
 fn load_csv_common<P: AsRef<Path>>(
     path: P,

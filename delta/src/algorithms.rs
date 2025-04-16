@@ -33,10 +33,26 @@ use std::ops::SubAssign;
 use ndarray::{Array1, Array2, Axis, ScalarOperand};
 use num_traits::{Float, FromPrimitive};
 
-use super::{
-    Algorithm, Scaler, StandardScaler, batch_gradient_descent, logistic_gradient_descent,
-    losses::Loss,
+use crate::{
+    batch_gradient_descent, logistic_gradient_descent,
+    scalers::{Scaler, StandardScaler},
 };
+
+use super::losses::Loss;
+
+pub trait Algorithm<T, L>
+where
+    T: Float,
+    L: Loss<T>,
+{
+    fn new(loss_function: L) -> Self
+    where
+        Self: Sized;
+
+    fn fit(&mut self, x: &Array2<T>, y: &Array1<T>, learning_rate: T, epochs: usize);
+
+    fn predict(&self, x: &Array2<T>) -> Array1<T>;
+}
 
 pub struct LinearRegression<T, L, S>
 where
@@ -250,7 +266,7 @@ where
             self.weights = Array1::zeros(x_scaled.shape()[1]);
         }
 
-        for _epoch in 0..epochs {
+        for _ in 0..epochs {
             let linear_output = self.predict_linear(&x_scaled);
             let _predictions = self.sigmoid(linear_output);
             let (grad_weights, grad_bias) =
@@ -274,8 +290,8 @@ mod tests {
     use num_traits::Float;
 
     use super::{LinearRegression, LogisticRegression};
-    use crate::classical::{
-        Algorithm,
+    use crate::{
+        algorithms::Algorithm,
         losses::{CrossEntropy, MSE},
     };
 

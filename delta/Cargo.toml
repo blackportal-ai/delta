@@ -22,10 +22,7 @@ maintenance = { status = "actively-developed" }
 ndarray = "0.16.1"
 csv = "1.1"
 thiserror = "2.0.12"
-
-[dependencies.num-traits]
-version = "0.2"
-optional = true
+num-traits = "0.2"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 metal = { version = "0.30.0", optional = true }
@@ -35,8 +32,3 @@ flamegraph = "0.6.6"
 linfa-datasets = { version = "0.x", features = ["iris"] }
 tempfile = "3.10"
 env_logger = "0.11"
-
-[features]
-default = ["classical"]
-classical = ["num-traits"]
-metal = ["dep:metal"]

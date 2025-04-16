@@ -27,66 +27,37 @@
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-extern crate core;
+use thiserror::Error;
 
-use num_traits::Float;
-use std::{ops::SubAssign, path::PathBuf};
-
-use ::ndarray::{Array1, Array2, ScalarOperand};
-
-pub mod algorithms;
-pub mod data;
-pub mod error;
-pub mod losses;
-pub mod scalers;
-
-// Re-exports for convenience
-pub mod ndarray {
-    pub use ndarray::*;
+#[derive(Error, Debug)]
+pub enum DataError {
+    #[error("CSV error: {0}")]
+    Csv(#[from] CsvError),
 }
 
-pub fn get_workspace_dir() -> PathBuf {
-    // Add a default for flamegraph's to work
-    let path = std::env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".to_string());
-    let mut path = PathBuf::from(path);
-    path.pop();
-    path
-}
+#[derive(Error, Debug)]
+pub enum CsvError {
+    #[error("Failed to open file: {0}")]
+    FileOpen(#[from] std::io::Error),
 
-fn batch_gradient_descent<T>(
-    x: &Array2<T>,
-    y: &Array1<T>,
-    weights: &Array1<T>,
-    bias: T,
-) -> (Array1<T>, T)
-where
-    T: Float + ScalarOperand + SubAssign,
-{
-    let predictions = x.dot(weights) + bias;
-    let m = T::from(x.shape()[0]).unwrap();
+    #[error("CSV file is empty")]
+    EmptyFile,
 
-    let grad_weights = x.t().dot(&(predictions.clone() - y)) / m;
-    let grad_bias = (predictions - y).sum() / m;
+    #[error("CSV must have at least one feature and one target column")]
+    InsufficientColumns,
 
-    (grad_weights, grad_bias)
-}
+    #[error("Inconsistent column count: row {row} has {actual} columns, expected {expected}")]
+    InconsistentColumns { row: usize, actual: usize, expected: usize },
 
-fn logistic_gradient_descent<T>(
-    x: &Array2<T>,
-    y: &Array1<T>,
-    weights: &Array1<T>,
-    bias: T,
-) -> (Array1<T>, T)
-where
-    T: Float + ScalarOperand,
-{
-    let predictions = x.dot(weights) + bias;
-    let m = T::from(x.shape()[0]).unwrap();
+    #[error("Invalid numeric value '{value}' at row {row}: {source}")]
+    InvalidNumeric { value: String, row: usize, source: std::num::ParseFloatError },
 
-    let sigmoid_preds = predictions.mapv(|x| T::one() / (T::one() + (-x).exp()));
+    #[error("Invalid target value '{value}' at row {row}: {source}")]
+    InvalidTarget { value: String, row: usize, source: std::num::ParseFloatError },
 
-    let grad_weights = x.t().dot(&(sigmoid_preds.clone() - y)) / m;
-    let grad_bias = (sigmoid_preds - y).sum() / m;
+    #[error("Failed to shape data into array: {0}")]
+    ArrayShape(#[from] ndarray::ShapeError),
 
-    (grad_weights, grad_bias)
+    #[error("Failed to parse CSV: {0}")]
+    CsvParse(#[from] csv::Error),
 }
