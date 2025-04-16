@@ -177,7 +177,7 @@ mod tests {
     }
 
     #[test]
-    fn test_load_numeric_no_headers() {
+    fn load_numeric_no_headers() {
         let csv_content = "1.0,2.0\n3.0,4.0\n5.0,6.0\n";
         let temp_file = create_temp_csv(csv_content);
 
@@ -192,7 +192,7 @@ mod tests {
     }
 
     #[test]
-    fn test_load_categorical_no_headers() {
+    fn load_categorical_no_headers() {
         let csv_content = "1.0,male,0\n2.0,female,1\n3.0,male,0\n";
         let temp_file = create_temp_csv(csv_content);
 
@@ -207,7 +207,7 @@ mod tests {
     }
 
     #[test]
-    fn test_load_headers_with_categoricals() {
+    fn load_headers_with_categoricals() {
         let csv_content = "age,gender,target\n25,male,0\n30,female,1\n35,male,0\n";
         let temp_file = create_temp_csv(csv_content);
 
@@ -222,7 +222,7 @@ mod tests {
     }
 
     #[test]
-    fn test_load_empty_file() {
+    fn load_empty_file() {
         let csv_content = "";
         let temp_file = create_temp_csv(csv_content);
 
@@ -231,7 +231,7 @@ mod tests {
     }
 
     #[test]
-    fn test_load_single_column() {
+    fn load_single_column() {
         let csv_content = "1.0\n2.0\n3.0\n";
         let temp_file = create_temp_csv(csv_content);
 
@@ -240,7 +240,7 @@ mod tests {
     }
 
     #[test]
-    fn test_load_missing_numeric_value() {
+    fn load_missing_numeric_value() {
         let csv_content = "1.0,,0\n2.0,4.0,1\n";
         let temp_file = create_temp_csv(csv_content);
 
@@ -255,7 +255,7 @@ mod tests {
     }
 
     #[test]
-    fn test_load_missing_categorical_value() {
+    fn load_missing_categorical_value() {
         let csv_content = "1.0,male,0\n2.0,,1\n3.0,female,0\n";
         let temp_file = create_temp_csv(csv_content);
 
@@ -270,7 +270,7 @@ mod tests {
     }
 
     #[test]
-    fn test_load_missing_target() {
+    fn load_missing_target() {
         let csv_content = "1.0,male,0\n2.0,female,\n3.0,male,1\n";
         let temp_file = create_temp_csv(csv_content);
 
@@ -285,7 +285,7 @@ mod tests {
     }
 
     #[test]
-    fn test_load_invalid_target() {
+    fn load_invalid_target() {
         let csv_content = "1.0,male,invalid\n2.0,female,1\n";
         let temp_file = create_temp_csv(csv_content);
 
@@ -294,7 +294,7 @@ mod tests {
     }
 
     #[test]
-    fn test_load_inconsistent_columns() {
+    fn load_inconsistent_columns() {
         let csv_content = "1.0,male,0\n2.0,female,1,extra\n";
         let temp_file = create_temp_csv(csv_content);
 
@@ -305,13 +305,13 @@ mod tests {
     }
 
     #[test]
-    fn test_load_nonexistent_file() {
+    fn load_nonexistent_file() {
         let result = load_data::<CsvLoader, _>("nonexistent.csv");
         assert!(matches!(result, Err(CsvError::FileOpen(_))));
     }
 
     #[test]
-    fn test_load_all_missing_categorical() {
+    fn load_all_missing_categorical() {
         let csv_content = "1.0,,0\n2.0,,1\n3.0,,0\n";
         let temp_file = create_temp_csv(csv_content);
         let (features, targets) =

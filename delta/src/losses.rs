@@ -114,7 +114,7 @@ mod tests {
     use ndarray::{Array1, array};
 
     #[test]
-    fn test_mse_empty_input() {
+    fn mse_empty_input() {
         let loss = MSE;
         let predictions: Array1<f64> = Array1::zeros(0);
         let actuals = array![1.0];
@@ -123,7 +123,7 @@ mod tests {
     }
 
     #[test]
-    fn test_mse_dimension_mismatch() {
+    fn mse_dimension_mismatch() {
         let loss = MSE;
         let predictions = array![1.0, 2.0];
         let actuals = array![1.0, 2.0, 3.0];
@@ -132,7 +132,7 @@ mod tests {
     }
 
     #[test]
-    fn test_mse_invalid_numeric_value() {
+    fn mse_invalid_numeric_value() {
         let loss = MSE;
         let predictions = array![1.0, f64::NAN];
         let actuals = array![1.0, 2.0];
@@ -141,7 +141,7 @@ mod tests {
     }
 
     #[test]
-    fn test_mse_valid_computation() {
+    fn mse_valid_computation() {
         let loss = MSE;
         let predictions = array![1.0, 2.0, 3.0];
         let actuals = array![1.1, 2.1, 3.1];
@@ -152,7 +152,7 @@ mod tests {
     }
 
     #[test]
-    fn test_cross_entropy_empty_input() {
+    fn cross_entropy_empty_input() {
         let loss = CrossEntropy;
         let predictions = Array1::zeros(0);
         let actuals = array![0.0];
@@ -161,7 +161,7 @@ mod tests {
     }
 
     #[test]
-    fn test_cross_entropy_dimension_mismatch() {
+    fn cross_entropy_dimension_mismatch() {
         let loss = CrossEntropy;
         let predictions = array![0.1, 0.9];
         let actuals = array![0.0, 1.0, 0.0];
@@ -170,7 +170,7 @@ mod tests {
     }
 
     #[test]
-    fn test_cross_entropy_invalid_numeric_value() {
+    fn cross_entropy_invalid_numeric_value() {
         let loss = CrossEntropy;
         let predictions = array![0.1, f64::INFINITY];
         let actuals = array![0.0, 1.0];
@@ -179,7 +179,7 @@ mod tests {
     }
 
     #[test]
-    fn test_cross_entropy_invalid_prediction_range() {
+    fn cross_entropy_invalid_prediction_range() {
         let loss = CrossEntropy;
         let predictions = array![0.1, 1.1];
         let actuals = array![0.0, 1.0];
@@ -188,7 +188,7 @@ mod tests {
     }
 
     #[test]
-    fn test_cross_entropy_invalid_actual_value() {
+    fn cross_entropy_invalid_actual_value() {
         let loss = CrossEntropy;
         let predictions = array![0.1, 0.9];
         let actuals = array![0.0, 2.0];
@@ -197,7 +197,7 @@ mod tests {
     }
 
     #[test]
-    fn test_cross_entropy_valid_computation() {
+    fn cross_entropy_valid_computation() {
         let loss = CrossEntropy;
         let predictions = array![0.1, 0.9];
         let actuals = array![0.0, 1.0];

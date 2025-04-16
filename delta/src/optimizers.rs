@@ -155,7 +155,7 @@ mod tests {
     use ndarray::{Array1, Array2, array};
 
     #[test]
-    fn test_batch_gradient_descent_empty_input() {
+    fn batch_gradient_descent_empty_input() {
         let optimizer = BatchGradientDescent;
         let x: Array2<f64> = Array2::zeros((0, 2));
         let y: Array1<f64> = Array1::zeros(0);
@@ -165,7 +165,7 @@ mod tests {
     }
 
     #[test]
-    fn test_batch_gradient_descent_zero_samples() {
+    fn batch_gradient_descent_zero_samples() {
         let optimizer = BatchGradientDescent;
         let x: Array2<f64> = Array2::zeros((0, 2));
         let y: Array1<f64> = Array1::zeros(0);
@@ -175,7 +175,7 @@ mod tests {
     }
 
     #[test]
-    fn test_batch_gradient_descent_dimension_mismatch_weights() {
+    fn batch_gradient_descent_dimension_mismatch_weights() {
         let optimizer = BatchGradientDescent;
         let x = array![[1.0, 2.0], [3.0, 4.0]];
         let y = array![1.0, 2.0];
@@ -188,7 +188,7 @@ mod tests {
     }
 
     #[test]
-    fn test_batch_gradient_descent_dimension_mismatch_samples() {
+    fn batch_gradient_descent_dimension_mismatch_samples() {
         let optimizer = BatchGradientDescent;
         let x = array![[1.0, 2.0], [3.0, 4.0]];
         let y = array![1.0, 2.0, 3.0];
@@ -201,7 +201,7 @@ mod tests {
     }
 
     #[test]
-    fn test_batch_gradient_descent_invalid_numeric_value() {
+    fn batch_gradient_descent_invalid_numeric_value() {
         let optimizer = BatchGradientDescent;
         let x = array![[1.0, f64::NAN], [3.0, 4.0]];
         let y = array![1.0, 2.0];
@@ -211,7 +211,7 @@ mod tests {
     }
 
     #[test]
-    fn test_batch_gradient_descent_valid_computation() {
+    fn batch_gradient_descent_valid_computation() {
         let optimizer = BatchGradientDescent;
         let x = array![[1.0, 2.0], [3.0, 4.0]];
         let y = array![1.0, 2.0];
@@ -226,7 +226,7 @@ mod tests {
     }
 
     #[test]
-    fn test_logistic_gradient_descent_empty_input() {
+    fn logistic_gradient_descent_empty_input() {
         let optimizer = LogisticGradientDescent;
         let x: Array2<f64> = Array2::zeros((0, 2));
         let y: Array1<f64> = Array1::zeros(0);
@@ -236,7 +236,7 @@ mod tests {
     }
 
     #[test]
-    fn test_logistic_gradient_descent_zero_samples() {
+    fn logistic_gradient_descent_zero_samples() {
         let optimizer = LogisticGradientDescent;
         let x: Array2<f64> = Array2::zeros((0, 2));
         let y: Array1<f64> = Array1::zeros(0);
@@ -246,7 +246,7 @@ mod tests {
     }
 
     #[test]
-    fn test_logistic_gradient_descent_dimension_mismatch_weights() {
+    fn logistic_gradient_descent_dimension_mismatch_weights() {
         let optimizer = LogisticGradientDescent;
         let x = array![[1.0, 2.0], [3.0, 4.0]];
         let y = array![0.0, 1.0];
@@ -259,7 +259,7 @@ mod tests {
     }
 
     #[test]
-    fn test_logistic_gradient_descent_dimension_mismatch_samples() {
+    fn logistic_gradient_descent_dimension_mismatch_samples() {
         let optimizer = LogisticGradientDescent;
         let x = array![[1.0, 2.0], [3.0, 4.0]];
         let y = array![0.0, 1.0, 0.0];
@@ -272,7 +272,7 @@ mod tests {
     }
 
     #[test]
-    fn test_logistic_gradient_descent_invalid_numeric_value() {
+    fn logistic_gradient_descent_invalid_numeric_value() {
         let optimizer = LogisticGradientDescent;
         let x = array![[1.0, 2.0], [3.0, f64::INFINITY]];
         let y = array![0.0, 1.0];
@@ -282,7 +282,7 @@ mod tests {
     }
 
     #[test]
-    fn test_logistic_gradient_descent_valid_computation() {
+    fn logistic_gradient_descent_valid_computation() {
         let optimizer = LogisticGradientDescent;
         let x = array![[1.0, 2.0], [3.0, 4.0]];
         let y = array![0.0, 1.0];

@@ -306,7 +306,7 @@ mod tests {
     use ndarray::{Array1, Array2, array};
 
     #[test]
-    fn test_linear_regression_fit_empty_input() {
+    fn linear_regression_fit_empty_input() {
         let mut model = LinearRegression::new().build();
         let x: Array2<f64> = Array2::zeros((0, 2));
         let y: Array1<f64> = Array1::zeros(0);
@@ -315,7 +315,7 @@ mod tests {
     }
 
     #[test]
-    fn test_linear_regression_fit_no_features() {
+    fn linear_regression_fit_no_features() {
         let mut model = LinearRegression::new().build();
         let x: Array2<f64> = Array2::zeros((2, 0));
         let y = array![1.0, 2.0];
@@ -324,7 +324,7 @@ mod tests {
     }
 
     #[test]
-    fn test_linear_regression_fit_dimension_mismatch() {
+    fn linear_regression_fit_dimension_mismatch() {
         let mut model = LinearRegression::new().build();
         let x = array![[1.0, 2.0], [3.0, 4.0]];
         let y = array![1.0, 2.0, 3.0];
@@ -336,7 +336,7 @@ mod tests {
     }
 
     #[test]
-    fn test_linear_regression_predict_not_fitted() {
+    fn linear_regression_predict_not_fitted() {
         let model = LinearRegression::new().build();
         let x = array![[1.0, 2.0]];
         let result = model.predict(&x);
@@ -344,7 +344,7 @@ mod tests {
     }
 
     #[test]
-    fn test_linear_regression_predict_dimension_mismatch() {
+    fn linear_regression_predict_dimension_mismatch() {
         let mut model = LinearRegression::new().build();
         let x_train = array![[1.0, 2.0], [3.0, 4.0]];
         let y_train = array![1.0, 2.0];
@@ -358,7 +358,7 @@ mod tests {
     }
 
     #[test]
-    fn test_linear_regression_fit_predict() {
+    fn linear_regression_fit_predict() {
         let mut model = LinearRegression::new()
             .optimizer(BatchGradientDescent)
             .loss_function(MSE)
@@ -374,7 +374,7 @@ mod tests {
     }
 
     #[test]
-    fn test_linear_regression_calculate_loss() {
+    fn linear_regression_calculate_loss() {
         let model = LinearRegression::new().build();
         let predictions = array![1.0, 2.0, 3.0];
         let actuals = array![1.1, 2.1, 3.1];
@@ -383,7 +383,7 @@ mod tests {
     }
 
     #[test]
-    fn test_logistic_regression_fit_empty_input() {
+    fn logistic_regression_fit_empty_input() {
         let mut model = LogisticRegression::new().build();
         let x: Array2<f64> = Array2::zeros((0, 2));
         let y: Array1<f64> = Array1::zeros(0);
@@ -392,7 +392,7 @@ mod tests {
     }
 
     #[test]
-    fn test_logistic_regression_fit_no_features() {
+    fn logistic_regression_fit_no_features() {
         let mut model = LogisticRegression::new().build();
         let x: Array2<f64> = Array2::zeros((2, 0));
         let y = array![0.0, 1.0];
@@ -401,7 +401,7 @@ mod tests {
     }
 
     #[test]
-    fn test_logistic_regression_fit_dimension_mismatch() {
+    fn logistic_regression_fit_dimension_mismatch() {
         let mut model = LogisticRegression::new().build();
         let x = array![[1.0, 2.0], [3.0, 4.0]];
         let y = array![0.0, 1.0, 0.0];
@@ -413,7 +413,7 @@ mod tests {
     }
 
     #[test]
-    fn test_logistic_regression_fit_invalid_labels() {
+    fn logistic_regression_fit_invalid_labels() {
         let mut model = LogisticRegression::new().build();
         let x = array![[1.0, 2.0], [3.0, 4.0]];
         let y = array![0.0, 2.0];
@@ -425,7 +425,7 @@ mod tests {
     }
 
     #[test]
-    fn test_logistic_regression_predict_not_fitted() {
+    fn logistic_regression_predict_not_fitted() {
         let model = LogisticRegression::new().build();
         let x = array![[1.0, 2.0]];
         let result = model.predict(&x);
@@ -433,7 +433,7 @@ mod tests {
     }
 
     #[test]
-    fn test_logistic_regression_predict_dimension_mismatch() {
+    fn logistic_regression_predict_dimension_mismatch() {
         let mut model = LogisticRegression::new().build();
         let x_train = array![[1.0, 2.0], [3.0, 4.0]];
         let y_train = array![0.0, 1.0];
@@ -447,7 +447,7 @@ mod tests {
     }
 
     #[test]
-    fn test_logistic_regression_fit_predict() {
+    fn logistic_regression_fit_predict() {
         let mut model = LogisticRegression::new()
             .optimizer(LogisticGradientDescent)
             .loss_function(CrossEntropy)
@@ -462,7 +462,7 @@ mod tests {
     }
 
     #[test]
-    fn test_logistic_regression_calculate_loss() {
+    fn logistic_regression_calculate_loss() {
         let model = LogisticRegression::new().build();
         let predictions = array![0.1, 0.9];
         let actuals = array![0.0, 1.0];

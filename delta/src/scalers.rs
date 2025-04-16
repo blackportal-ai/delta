@@ -103,14 +103,14 @@ mod tests {
     use ndarray::{Array2, array};
 
     #[test]
-    fn test_standard_scaler_new() {
+    fn standard_scaler_new() {
         let scaler = StandardScaler::new();
         assert!(scaler.mean.is_none());
         assert!(scaler.std.is_none());
     }
 
     #[test]
-    fn test_standard_scaler_fit_transform_empty_input() {
+    fn standard_scaler_fit_transform_empty_input() {
         let mut scaler = StandardScaler::new();
         let x: Array2<f64> = Array2::zeros((0, 2));
         let result = scaler.fit_transform(&x);
@@ -118,7 +118,7 @@ mod tests {
     }
 
     #[test]
-    fn test_standard_scaler_fit_transform_no_features() {
+    fn standard_scaler_fit_transform_no_features() {
         let mut scaler = StandardScaler::new();
         let x: Array2<f64> = Array2::zeros((2, 0));
         let result = scaler.fit_transform(&x);
@@ -126,7 +126,7 @@ mod tests {
     }
 
     #[test]
-    fn test_standard_scaler_fit_transform_valid() {
+    fn standard_scaler_fit_transform_valid() {
         let mut scaler = StandardScaler::new();
         let x = array![[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]];
         let result = scaler.fit_transform(&x);
@@ -143,7 +143,7 @@ mod tests {
     }
 
     #[test]
-    fn test_standard_scaler_transform_not_fitted() {
+    fn standard_scaler_transform_not_fitted() {
         let scaler = StandardScaler::new();
         let x = array![[1.0, 2.0]];
         let result = scaler.transform(&x);
@@ -151,7 +151,7 @@ mod tests {
     }
 
     #[test]
-    fn test_standard_scaler_transform_empty_input() {
+    fn standard_scaler_transform_empty_input() {
         let mut scaler = StandardScaler::new();
         let x_train = array![[1.0, 2.0], [3.0, 4.0]];
         scaler.fit_transform(&x_train).unwrap();
@@ -161,7 +161,7 @@ mod tests {
     }
 
     #[test]
-    fn test_standard_scaler_transform_dimension_mismatch() {
+    fn standard_scaler_transform_dimension_mismatch() {
         let mut scaler = StandardScaler::new();
         let x_train = array![[1.0, 2.0], [3.0, 4.0]];
         scaler.fit_transform(&x_train).unwrap();
@@ -171,7 +171,7 @@ mod tests {
     }
 
     #[test]
-    fn test_standard_scaler_transform_valid() {
+    fn standard_scaler_transform_valid() {
         let mut scaler = StandardScaler::new();
         let x_train = array![[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]];
         scaler.fit_transform(&x_train).unwrap();
@@ -184,7 +184,7 @@ mod tests {
     }
 
     #[test]
-    fn test_standard_scaler_inverse_transform_not_fitted() {
+    fn standard_scaler_inverse_transform_not_fitted() {
         let scaler = StandardScaler::new();
         let x = array![[1.0, 2.0]];
         let result = scaler.inverse_transform(&x);
@@ -192,7 +192,7 @@ mod tests {
     }
 
     #[test]
-    fn test_standard_scaler_inverse_transform_empty_input() {
+    fn standard_scaler_inverse_transform_empty_input() {
         let mut scaler = StandardScaler::new();
         let x_train = array![[1.0, 2.0], [3.0, 4.0]];
         scaler.fit_transform(&x_train).unwrap();
@@ -202,7 +202,7 @@ mod tests {
     }
 
     #[test]
-    fn test_standard_scaler_inverse_transform_dimension_mismatch() {
+    fn standard_scaler_inverse_transform_dimension_mismatch() {
         let mut scaler = StandardScaler::new();
         let x_train = array![[1.0, 2.0], [3.0, 4.0]];
         scaler.fit_transform(&x_train).unwrap();
@@ -212,7 +212,7 @@ mod tests {
     }
 
     #[test]
-    fn test_standard_scaler_inverse_transform_valid() {
+    fn standard_scaler_inverse_transform_valid() {
         let mut scaler = StandardScaler::new();
         let x_train = array![[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]];
         let scaled = scaler.fit_transform(&x_train).unwrap();
