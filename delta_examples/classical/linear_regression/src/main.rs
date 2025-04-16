@@ -33,7 +33,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Predictions for new data: {:?}", predictions);
 
     // Calculate log loss for the test data
-    let test_loss = model.calculate_loss(&predictions, &y_test);
+    let test_loss = model.calculate_loss(&predictions, &y_test)?;
     println!("Test Loss after training: {:.6}", test_loss);
 
     Ok(())

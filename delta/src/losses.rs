@@ -29,23 +29,73 @@
 
 use ndarray::Array1;
 
+use crate::errors::LossError;
+
 pub trait LossFunction {
-    fn calculate(&self, predictions: &Array1<f64>, actuals: &Array1<f64>) -> f64;
+    fn calculate(&self, predictions: &Array1<f64>, actuals: &Array1<f64>)
+    -> Result<f64, LossError>;
 }
 
 pub struct MSE;
 
 impl LossFunction for MSE {
-    fn calculate(&self, predictions: &Array1<f64>, actuals: &Array1<f64>) -> f64 {
+    fn calculate(
+        &self,
+        predictions: &Array1<f64>,
+        actuals: &Array1<f64>,
+    ) -> Result<f64, LossError> {
+        if predictions.is_empty() || actuals.is_empty() {
+            return Err(LossError::EmptyInput);
+        }
+
+        if predictions.len() != actuals.len() {
+            return Err(LossError::DimensionMismatch {
+                expected: predictions.len(),
+                actual: actuals.len(),
+            });
+        }
+
+        if predictions.iter().any(|&v| !v.is_finite()) || actuals.iter().any(|&v| !v.is_finite()) {
+            return Err(LossError::InvalidNumericValue);
+        }
+
         let diff = predictions - actuals;
-        diff.mapv(|x| x * x).mean().unwrap_or(0.0)
+        let mse = diff.mapv(|x| x * x).mean().ok_or(LossError::EmptyInput)?;
+        Ok(mse)
     }
 }
 
 pub struct CrossEntropy;
 
 impl LossFunction for CrossEntropy {
-    fn calculate(&self, predictions: &Array1<f64>, actuals: &Array1<f64>) -> f64 {
+    fn calculate(
+        &self,
+        predictions: &Array1<f64>,
+        actuals: &Array1<f64>,
+    ) -> Result<f64, LossError> {
+        if predictions.is_empty() || actuals.is_empty() {
+            return Err(LossError::EmptyInput);
+        }
+
+        if predictions.len() != actuals.len() {
+            return Err(LossError::DimensionMismatch {
+                expected: predictions.len(),
+                actual: actuals.len(),
+            });
+        }
+
+        if predictions.iter().any(|&v| !v.is_finite()) || actuals.iter().any(|&v| !v.is_finite()) {
+            return Err(LossError::InvalidNumericValue);
+        }
+
+        if predictions.iter().any(|&p| p < 0.0 || p > 1.0) {
+            return Err(LossError::InvalidPredictionRange);
+        }
+
+        if actuals.iter().any(|&y| y != 0.0 && y != 1.0) {
+            return Err(LossError::InvalidActualValue);
+        }
+
         let epsilon = 1e-15;
         let clipped_preds = predictions.mapv(|x| x.max(epsilon).min(1.0 - epsilon));
         let log_loss = actuals
@@ -54,6 +104,6 @@ impl LossFunction for CrossEntropy {
             .map(|(&y, &p)| -y * p.ln() - (1.0 - y) * (1.0 - p).ln())
             .sum::<f64>()
             / actuals.len() as f64;
-        log_loss
+        Ok(log_loss)
     }
 }

@@ -29,7 +29,7 @@
 
 use ndarray::{Array1, Array2, Axis};
 
-use crate::errors::{ModelError, ScalerError};
+use crate::errors::{LossError, ModelError, ScalerError};
 use crate::losses::{CrossEntropy, LossFunction, MSE};
 use crate::optimizers::{BatchGradientDescent, LogisticGradientDescent, Optimizer};
 use crate::scalers::StandardScaler;
@@ -130,7 +130,7 @@ impl LinearRegression {
 
         for _epoch in 0..epochs {
             let predictions = self.predict_linear(&x_scaled);
-            let _loss = self.loss_function.calculate(&predictions, &y_scaled);
+            let _loss = self.loss_function.calculate(&predictions, &y_scaled)?;
 
             let (grad_weights, grad_bias) = self.optimizer.compute_gradients(
                 &x_scaled,
@@ -159,7 +159,11 @@ impl LinearRegression {
         Ok(predictions)
     }
 
-    pub fn calculate_loss(&self, predictions: &Array1<f64>, actuals: &Array1<f64>) -> f64 {
+    pub fn calculate_loss(
+        &self,
+        predictions: &Array1<f64>,
+        actuals: &Array1<f64>,
+    ) -> Result<f64, LossError> {
         self.loss_function.calculate(predictions, actuals)
     }
 
@@ -259,7 +263,7 @@ impl LogisticRegression {
         for _epoch in 0..epochs {
             let linear_output = self.predict_linear(&x_scaled);
             let predictions = self.sigmoid(&linear_output);
-            let _loss = self.loss_function.calculate(&predictions, y);
+            let _loss = self.loss_function.calculate(&predictions, y)?;
 
             let (grad_weights, grad_bias) =
                 self.optimizer.compute_gradients(&x_scaled, y, &self.weights, self.bias)?;
@@ -276,7 +280,11 @@ impl LogisticRegression {
         Ok(self.sigmoid(&linear_output))
     }
 
-    pub fn calculate_loss(&self, predictions: &Array1<f64>, actuals: &Array1<f64>) -> f64 {
+    pub fn calculate_loss(
+        &self,
+        predictions: &Array1<f64>,
+        actuals: &Array1<f64>,
+    ) -> Result<f64, LossError> {
         self.loss_function.calculate(predictions, actuals)
     }
 
@@ -370,7 +378,7 @@ mod tests {
         let model = LinearRegression::new().build();
         let predictions = array![1.0, 2.0, 3.0];
         let actuals = array![1.1, 2.1, 3.1];
-        let loss = model.calculate_loss(&predictions, &actuals);
+        let loss = model.calculate_loss(&predictions, &actuals).unwrap();
         assert!((loss - 0.01).abs() < 1e-6);
     }
 
@@ -458,7 +466,7 @@ mod tests {
         let model = LogisticRegression::new().build();
         let predictions = array![0.1, 0.9];
         let actuals = array![0.0, 1.0];
-        let loss = model.calculate_loss(&predictions, &actuals);
+        let loss = model.calculate_loss(&predictions, &actuals).unwrap();
         assert!(loss > 0.0);
     }
 }

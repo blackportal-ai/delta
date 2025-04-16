@@ -69,6 +69,9 @@ pub enum ModelError {
 
     #[error("Optimizer error: {0}")]
     Optimizer(#[from] OptimizerError),
+
+    #[error("Loss error: {0}")]
+    Loss(#[from] LossError),
 }
 
 #[derive(Error, Debug)]
@@ -105,4 +108,22 @@ pub enum OptimizerError {
 
     #[error("Numerical instability in gradient computation")]
     NumericalInstability,
+}
+
+#[derive(Error, Debug)]
+pub enum LossError {
+    #[error("Input arrays are empty")]
+    EmptyInput,
+
+    #[error("Dimension mismatch: expected {expected} elements, got {actual}")]
+    DimensionMismatch { expected: usize, actual: usize },
+
+    #[error("Invalid numeric value (NaN or Inf) detected")]
+    InvalidNumericValue,
+
+    #[error("Prediction values must be in [0.0, 1.0]")]
+    InvalidPredictionRange,
+
+    #[error("Actual values must be 0.0 or 1.0")]
+    InvalidActualValue,
 }
