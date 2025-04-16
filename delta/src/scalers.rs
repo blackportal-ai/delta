@@ -66,6 +66,7 @@ impl StandardScaler {
         Ok((x - mean) / std)
     }
 
+    #[inline]
     pub fn transform(&self, x: &Array2<f64>) -> Result<Array2<f64>, ScalerError> {
         let mean = self.mean.as_ref().ok_or(ScalerError::NotFitted)?;
         let std = self.std.as_ref().ok_or(ScalerError::NotFitted)?;
@@ -81,6 +82,7 @@ impl StandardScaler {
         Ok((x - mean) / std)
     }
 
+    #[inline]
     pub fn inverse_transform(&self, x: &Array2<f64>) -> Result<Array2<f64>, ScalerError> {
         let mean = self.mean.as_ref().ok_or(ScalerError::NotFitted)?;
         let std = self.std.as_ref().ok_or(ScalerError::NotFitted)?;
@@ -117,24 +119,15 @@ impl MinMaxScaler {
         }
 
         // Compute min and max for each column
-        let mut min = Array1::from_elem(x.ncols(), f64::INFINITY);
-        let mut max = Array1::from_elem(x.ncols(), f64::NEG_INFINITY);
-
-        for (col_idx, col) in x.axis_iter(Axis(1)).enumerate() {
-            for &val in col.iter() {
-                if !val.is_finite() {
-                    return Err(ScalerError::InvalidNumericValue);
-                }
-                min[col_idx] = min[col_idx].min(val);
-                max[col_idx] = max[col_idx].max(val);
-            }
-        }
+        let min = x.fold_axis(Axis(0), f64::INFINITY, |&acc, &x| f64::min(acc, x));
+        let max = x.fold_axis(Axis(0), f64::NEG_INFINITY, |&acc, &x| f64::max(acc, x));
 
         self.min = Some(min);
         self.max = Some(max);
         self.transform(x)
     }
 
+    #[inline]
     pub fn transform(&self, x: &Array2<f64>) -> Result<Array2<f64>, ScalerError> {
         let min = self.min.as_ref().ok_or(ScalerError::NotFitted)?;
         let max = self.max.as_ref().ok_or(ScalerError::NotFitted)?;
