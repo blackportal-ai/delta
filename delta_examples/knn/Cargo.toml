@@ -1,0 +1,8 @@
+[package]
+name = "knn"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+deltaml = { path = "../../delta" }
+tokio = { workspace = true, features = ["full"] }

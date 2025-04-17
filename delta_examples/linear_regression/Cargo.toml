@@ -1,9 +1,9 @@
 [package]
-name = "logistic_regression"
+name = "linear_regression"
 version = "0.1.0"
 edition = "2021"
 publish = false
 
 [dependencies]
-deltaml = { path = "../../../delta" }
+deltaml = { path = "../../delta" }
 tokio = { workspace = true, features = ["full"] }

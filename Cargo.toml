@@ -1,8 +1,9 @@
 [workspace]
 members = [
     "delta",
-    "delta_examples/classical/linear_regression",
-    "delta_examples/classical/logistic_regression",
+    "delta_examples/linear_regression",
+    "delta_examples/logistic_regression",
+    "delta_examples/knn",
 ]
 resolver = "2"
 
