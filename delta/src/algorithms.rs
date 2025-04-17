@@ -306,7 +306,6 @@ pub struct KNNBuilder {
     k: usize,
     normalize: bool,
     x_scaler: StandardScaler,
-    loss_function: Box<dyn LossFunction>,
 }
 
 impl KNNBuilder {
@@ -325,11 +324,6 @@ impl KNNBuilder {
         self
     }
 
-    pub fn loss_function(mut self, loss_function: impl LossFunction + 'static) -> Self {
-        self.loss_function = Box::new(loss_function);
-        self
-    }
-
     pub fn build(self) -> KNN {
         KNN {
             x_train: None,
@@ -337,7 +331,6 @@ impl KNNBuilder {
             k: self.k,
             normalize: self.normalize,
             x_scaler: self.x_scaler,
-            loss_function: self.loss_function,
         }
     }
 }
@@ -348,17 +341,11 @@ pub struct KNN {
     k: usize,
     normalize: bool,
     x_scaler: StandardScaler,
-    loss_function: Box<dyn LossFunction>,
 }
 
 impl KNN {
     pub fn new() -> KNNBuilder {
-        KNNBuilder {
-            k: 3,
-            normalize: true,
-            x_scaler: StandardScaler::new(),
-            loss_function: Box::new(MSE),
-        }
+        KNNBuilder { k: 3, normalize: true, x_scaler: StandardScaler::new() }
     }
 
     pub fn fit(&mut self, x: &Array2<f64>, y: &Array1<f64>) -> Result<(), ModelError> {
@@ -420,18 +407,36 @@ impl KNN {
             indices.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
             let k_indices = indices.iter().take(self.k).map(|&(idx, _)| idx);
 
-            let mean = k_indices.map(|idx| y_train[idx]).sum::<f64>() / self.k as f64;
-            predictions[i] = mean;
+            // Collect class labels of k nearest neighbors as integers
+            let mut class_counts = std::collections::HashMap::new();
+            for idx in k_indices {
+                let label = y_train[idx];
+                // Ensure label is a valid class (0.0, 1.0, 2.0) and convert to usize
+                if label != 0.0 && label != 1.0 && label != 2.0 {
+                    return Err(ModelError::Scaler(ScalerError::InvalidParameter)); // Or handle differently
+                }
+                let label_int = label as usize; // Safe for 0.0, 1.0, 2.0
+                *class_counts.entry(label_int).or_insert(0) += 1;
+            }
+
+            // Find the class with the most votes
+            let (predicted_class_int, _) = class_counts
+                .into_iter()
+                .max_by(|a, b| a.1.cmp(&b.1).then_with(|| b.0.cmp(&a.0))) // Tiebreaker: higher label
+                .unwrap_or((0, 0)); // Default to class 0 if no votes (edge case)
+
+            predictions[i] = predicted_class_int as f64; // Convert back to f64 for output
         }
         Ok(predictions)
     }
 
-    pub fn calculate_loss(
-        &self,
-        predictions: &Array1<f64>,
-        actuals: &Array1<f64>,
-    ) -> Result<f64, LossError> {
-        self.loss_function.calculate(predictions, actuals)
+    pub fn calculate_accuracy(&self, predictions: &Array1<f64>, y_test: &Array1<f64>) -> f64 {
+        let correct = predictions
+            .iter()
+            .zip(y_test.iter())
+            .filter(|(&pred, &true_label)| pred == true_label)
+            .count();
+        correct as f64 / predictions.len() as f64
     }
 }
 
@@ -610,7 +615,7 @@ mod tests {
 
     #[test]
     fn knn_fit_predict() {
-        let mut knn = KNN::new().k(3).loss_function(MSE).normalize(false).build();
+        let mut knn = KNN::new().k(3).normalize(false).build();
         let x = array![[1.0, 2.0], [2.0, 3.0], [3.0, 4.0], [4.0, 5.0]];
         let y = array![1.0, 2.0, 3.0, 4.0];
         knn.fit(&x, &y).unwrap();
