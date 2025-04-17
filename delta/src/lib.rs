@@ -37,6 +37,8 @@ pub mod errors;
 pub mod losses;
 pub mod optimizers;
 pub mod scalers;
+#[cfg(feature = "tui")]
+pub mod tui;
 
 // Re-exports for convenience
 pub mod ndarray {

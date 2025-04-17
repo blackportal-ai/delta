@@ -4,6 +4,7 @@ use deltaml::{
     losses::MSE,
     optimizers::BatchGradientDescent,
     scalers::StandardScaler,
+    tui::init_tui,
 };
 
 #[tokio::main]
@@ -15,7 +16,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         load_data::<CsvHeadersLoader, _>("../test_data.csv").expect("Failed to load test_data.csv");
 
     // Instantiate the model
-    let mut model = LinearRegression::new()
+    let model = LinearRegression::new()
         .optimizer(BatchGradientDescent)
         .loss_function(MSE)
         .scaler(StandardScaler::new())
@@ -25,7 +26,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Train the model
     let learning_rate = 0.01;
     let epochs = 1000;
-    model.fit(&x_train, &y_train, learning_rate, epochs)?;
+
+    let model = init_tui(
+        model,
+        x_train.clone(),
+        y_train.clone(),
+        x_test.clone(),
+        y_test.clone(),
+        learning_rate,
+        epochs,
+    )?;
 
     // Make predictions with the trained model
     let predictions = model.predict(&x_test)?;

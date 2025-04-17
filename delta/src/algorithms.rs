@@ -34,6 +34,12 @@ use crate::losses::{CrossEntropy, LossFunction, MSE};
 use crate::optimizers::{BatchGradientDescent, LogisticGradientDescent, Optimizer};
 use crate::scalers::StandardScaler;
 
+#[derive(Clone)]
+pub struct TrainingMetrics {
+    pub loss: f64,
+    // pub accuracy: f64,
+}
+
 pub struct LinearRegressionBuilder {
     loss_function: Box<dyn LossFunction>,
     normalize: bool,
@@ -73,6 +79,7 @@ impl LinearRegressionBuilder {
             x_scaler: self.x_scaler,
             y_scaler: self.y_scaler,
             optimizer: self.optimizer,
+            metrics: Vec::new(),
         }
     }
 }
@@ -85,6 +92,7 @@ pub struct LinearRegression {
     x_scaler: StandardScaler,
     y_scaler: StandardScaler,
     optimizer: Box<dyn Optimizer>,
+    metrics: Vec<TrainingMetrics>,
 }
 
 impl LinearRegression {
@@ -127,11 +135,11 @@ impl LinearRegression {
 
         let (_, n_features) = x_scaled.dim();
         self.weights = Some(Array1::zeros(n_features));
+        self.metrics.clear();
 
         for _ in 0..epochs {
-            // These are commented out temporarily until we will store the predictions and loss for metrics
-            // let predictions = self.predict_linear(&x_scaled);
-            // let _loss = self.loss_function.calculate(&predictions, &y_scaled)?;
+            let predictions = self.predict_linear(&x_scaled);
+            let loss = self.loss_function.calculate(&predictions, &y_scaled)?;
 
             let (grad_weights, grad_bias) = self.optimizer.compute_gradients(
                 &x_scaled,
@@ -145,6 +153,8 @@ impl LinearRegression {
                     - &(grad_weights * learning_rate),
             );
             self.bias -= grad_bias * learning_rate;
+
+            self.metrics.push(TrainingMetrics { loss });
         }
         Ok(())
     }
@@ -166,6 +176,10 @@ impl LinearRegression {
         actuals: &Array1<f64>,
     ) -> Result<f64, LossError> {
         self.loss_function.calculate(predictions, actuals)
+    }
+
+    pub fn metrics(&self) -> &[TrainingMetrics] {
+        &self.metrics
     }
 
     #[inline(always)]
