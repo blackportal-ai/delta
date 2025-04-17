@@ -29,7 +29,7 @@
 
 use ndarray::{Array1, Array2, Axis};
 
-use crate::errors::ScalerError;
+use crate::errors::PreprocessingError;
 
 #[derive(Clone)]
 pub struct StandardScaler {
@@ -42,18 +42,18 @@ impl StandardScaler {
         StandardScaler { mean: None, std: None }
     }
 
-    pub fn fit_transform(&mut self, x: &Array2<f64>) -> Result<Array2<f64>, ScalerError> {
+    pub fn fit_transform(&mut self, x: &Array2<f64>) -> Result<Array2<f64>, PreprocessingError> {
         if x.ncols() == 0 {
-            return Err(ScalerError::NoFeatures);
+            return Err(PreprocessingError::NoFeatures);
         }
         if x.is_empty() {
-            return Err(ScalerError::EmptyInput);
+            return Err(PreprocessingError::EmptyInput);
         }
         if !x.iter().all(|&val| val.is_finite()) {
-            return Err(ScalerError::InvalidNumericValue);
+            return Err(PreprocessingError::InvalidNumericValue);
         }
 
-        let mean = x.mean_axis(Axis(0)).ok_or(ScalerError::EmptyInput)?;
+        let mean = x.mean_axis(Axis(0)).ok_or(PreprocessingError::EmptyInput)?;
         let std =
             x.var_axis(Axis(0), 0.0).mapv(|v| v.sqrt()).mapv(|s| if s < 1e-10 { 1.0 } else { s });
 
@@ -63,34 +63,34 @@ impl StandardScaler {
     }
 
     #[inline]
-    pub fn transform(&self, x: &Array2<f64>) -> Result<Array2<f64>, ScalerError> {
-        let mean = self.mean.as_ref().ok_or(ScalerError::NotFitted)?;
-        let std = self.std.as_ref().ok_or(ScalerError::NotFitted)?;
+    pub fn transform(&self, x: &Array2<f64>) -> Result<Array2<f64>, PreprocessingError> {
+        let mean = self.mean.as_ref().ok_or(PreprocessingError::NotFitted)?;
+        let std = self.std.as_ref().ok_or(PreprocessingError::NotFitted)?;
 
         if x.is_empty() {
-            return Err(ScalerError::EmptyInput);
+            return Err(PreprocessingError::EmptyInput);
         }
         if x.ncols() != mean.len() {
-            return Err(ScalerError::DimensionMismatch { expected: mean.len(), actual: x.ncols() });
+            return Err(PreprocessingError::DimensionMismatch { expected: mean.len(), actual: x.ncols() });
         }
         if !x.iter().all(|&val| val.is_finite()) {
-            return Err(ScalerError::InvalidNumericValue);
+            return Err(PreprocessingError::InvalidNumericValue);
         }
 
         Ok((x - mean) / std.mapv(|s| if s < 1e-10 { 1.0 } else { s }))
     }
 
     #[inline]
-    pub fn inverse_transform(&self, x: &Array2<f64>) -> Result<Array2<f64>, ScalerError> {
-        let mean = self.mean.as_ref().ok_or(ScalerError::NotFitted)?;
-        let std = self.std.as_ref().ok_or(ScalerError::NotFitted)?;
+    pub fn inverse_transform(&self, x: &Array2<f64>) -> Result<Array2<f64>, PreprocessingError> {
+        let mean = self.mean.as_ref().ok_or(PreprocessingError::NotFitted)?;
+        let std = self.std.as_ref().ok_or(PreprocessingError::NotFitted)?;
 
         if x.is_empty() {
-            return Err(ScalerError::EmptyInput);
+            return Err(PreprocessingError::EmptyInput);
         }
 
         if x.ncols() != mean.len() {
-            return Err(ScalerError::DimensionMismatch { expected: mean.len(), actual: x.ncols() });
+            return Err(PreprocessingError::DimensionMismatch { expected: mean.len(), actual: x.ncols() });
         }
 
         Ok(x * std + mean)
@@ -108,17 +108,17 @@ impl MinMaxScaler {
         MinMaxScaler { min: None, max: None, feature_range: (0.0, 1.0) }
     }
 
-    pub fn fit_transform(&mut self, x: &Array2<f64>) -> Result<Array2<f64>, ScalerError> {
+    pub fn fit_transform(&mut self, x: &Array2<f64>) -> Result<Array2<f64>, PreprocessingError> {
         if x.ncols() == 0 {
-            return Err(ScalerError::NoFeatures);
+            return Err(PreprocessingError::NoFeatures);
         }
 
         if x.is_empty() {
-            return Err(ScalerError::EmptyInput);
+            return Err(PreprocessingError::EmptyInput);
         }
 
         if !x.iter().all(|&val| val.is_finite()) {
-            return Err(ScalerError::InvalidNumericValue);
+            return Err(PreprocessingError::InvalidNumericValue);
         }
 
         // Compute min and max for each column
@@ -131,17 +131,17 @@ impl MinMaxScaler {
     }
 
     #[inline]
-    pub fn transform(&self, x: &Array2<f64>) -> Result<Array2<f64>, ScalerError> {
-        let min = self.min.as_ref().ok_or(ScalerError::NotFitted)?;
-        let max = self.max.as_ref().ok_or(ScalerError::NotFitted)?;
+    pub fn transform(&self, x: &Array2<f64>) -> Result<Array2<f64>, PreprocessingError> {
+        let min = self.min.as_ref().ok_or(PreprocessingError::NotFitted)?;
+        let max = self.max.as_ref().ok_or(PreprocessingError::NotFitted)?;
         if x.is_empty() {
-            return Err(ScalerError::EmptyInput);
+            return Err(PreprocessingError::EmptyInput);
         }
         if x.ncols() != min.len() {
-            return Err(ScalerError::DimensionMismatch { expected: min.len(), actual: x.ncols() });
+            return Err(PreprocessingError::DimensionMismatch { expected: min.len(), actual: x.ncols() });
         }
         if !x.iter().all(|&val| val.is_finite()) {
-            return Err(ScalerError::InvalidNumericValue);
+            return Err(PreprocessingError::InvalidNumericValue);
         }
 
         let range_min = self.feature_range.0;
@@ -168,7 +168,7 @@ mod tests {
         let mut scaler = StandardScaler::new();
         let x: Array2<f64> = Array2::zeros((0, 2));
         let result = scaler.fit_transform(&x);
-        assert!(matches!(result, Err(ScalerError::EmptyInput)));
+        assert!(matches!(result, Err(PreprocessingError::EmptyInput)));
     }
 
     #[test]
@@ -176,7 +176,7 @@ mod tests {
         let mut scaler = StandardScaler::new();
         let x: Array2<f64> = Array2::zeros((2, 0));
         let result = scaler.fit_transform(&x);
-        assert!(matches!(result, Err(ScalerError::NoFeatures)));
+        assert!(matches!(result, Err(PreprocessingError::NoFeatures)));
     }
 
     #[test]
@@ -201,7 +201,7 @@ mod tests {
         let scaler = StandardScaler::new();
         let x = array![[1.0, 2.0]];
         let result = scaler.transform(&x);
-        assert!(matches!(result, Err(ScalerError::NotFitted)));
+        assert!(matches!(result, Err(PreprocessingError::NotFitted)));
     }
 
     #[test]
@@ -211,7 +211,7 @@ mod tests {
         scaler.fit_transform(&x_train).unwrap();
         let x_test: Array2<f64> = Array2::zeros((0, 2));
         let result = scaler.transform(&x_test);
-        assert!(matches!(result, Err(ScalerError::EmptyInput)));
+        assert!(matches!(result, Err(PreprocessingError::EmptyInput)));
     }
 
     #[test]
@@ -221,7 +221,7 @@ mod tests {
         scaler.fit_transform(&x_train).unwrap();
         let x_test = array![[1.0, 2.0, 3.0]];
         let result = scaler.transform(&x_test);
-        assert!(matches!(result, Err(ScalerError::DimensionMismatch { expected: 2, actual: 3 })));
+        assert!(matches!(result, Err(PreprocessingError::DimensionMismatch { expected: 2, actual: 3 })));
     }
 
     #[test]
@@ -242,7 +242,7 @@ mod tests {
         let scaler = StandardScaler::new();
         let x = array![[1.0, 2.0]];
         let result = scaler.inverse_transform(&x);
-        assert!(matches!(result, Err(ScalerError::NotFitted)));
+        assert!(matches!(result, Err(PreprocessingError::NotFitted)));
     }
 
     #[test]
@@ -252,7 +252,7 @@ mod tests {
         scaler.fit_transform(&x_train).unwrap();
         let x_test: Array2<f64> = Array2::zeros((0, 2));
         let result = scaler.inverse_transform(&x_test);
-        assert!(matches!(result, Err(ScalerError::EmptyInput)));
+        assert!(matches!(result, Err(PreprocessingError::EmptyInput)));
     }
 
     #[test]
@@ -262,7 +262,7 @@ mod tests {
         scaler.fit_transform(&x_train).unwrap();
         let x_test = array![[1.0, 2.0, 3.0]];
         let result = scaler.inverse_transform(&x_test);
-        assert!(matches!(result, Err(ScalerError::DimensionMismatch { expected: 2, actual: 3 })));
+        assert!(matches!(result, Err(PreprocessingError::DimensionMismatch { expected: 2, actual: 3 })));
     }
 
     #[test]

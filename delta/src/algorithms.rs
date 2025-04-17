@@ -31,10 +31,10 @@ use std::collections::HashMap;
 
 use ndarray::{Array1, Array2, Axis};
 
-use crate::errors::{LossError, ModelError, ScalerError};
+use crate::errors::{LossError, ModelError, PreprocessingError};
 use crate::losses::{CrossEntropy, LossFunction, MSE};
 use crate::optimizers::{BatchGradientDescent, LogisticGradientDescent, Optimizer};
-use crate::scalers::StandardScaler;
+use crate::preprocessors::StandardScaler;
 
 // Re-export KNNMode variants for cleaner syntax
 pub use self::KNNMode::{Classification, Regression};
@@ -111,10 +111,10 @@ impl LinearRegression {
         epochs: usize,
     ) -> Result<(), ModelError> {
         if x.is_empty() || y.is_empty() {
-            return Err(ModelError::Scaler(ScalerError::EmptyInput));
+            return Err(ModelError::Preprocessing(PreprocessingError::EmptyInput));
         }
         if x.shape()[0] != y.shape()[0] {
-            return Err(ModelError::Scaler(ScalerError::DimensionMismatch {
+            return Err(ModelError::Preprocessing(PreprocessingError::DimensionMismatch {
                 expected: x.shape()[0],
                 actual: y.shape()[0],
             }));
@@ -247,16 +247,16 @@ impl LogisticRegression {
         epochs: usize,
     ) -> Result<(), ModelError> {
         if x.is_empty() || y.is_empty() {
-            return Err(ModelError::Scaler(ScalerError::EmptyInput));
+            return Err(ModelError::Preprocessing(PreprocessingError::EmptyInput));
         }
         if x.shape()[0] != y.shape()[0] {
-            return Err(ModelError::Scaler(ScalerError::DimensionMismatch {
+            return Err(ModelError::Preprocessing(PreprocessingError::DimensionMismatch {
                 expected: x.shape()[0],
                 actual: y.shape()[0],
             }));
         }
         if y.iter().any(|&v| v < 0.0 || v > 1.0) {
-            return Err(ModelError::Scaler(ScalerError::DimensionMismatch {
+            return Err(ModelError::Preprocessing(PreprocessingError::DimensionMismatch {
                 expected: 1,
                 actual: 0,
             }));
@@ -374,19 +374,19 @@ impl KNN {
 
     pub fn fit(&mut self, x: &Array2<f64>, y: &Array1<f64>) -> Result<(), ModelError> {
         if x.ncols() == 0 {
-            return Err(ModelError::Scaler(ScalerError::NoFeatures));
+            return Err(ModelError::Preprocessing(PreprocessingError::NoFeatures));
         }
         if x.is_empty() || y.is_empty() {
-            return Err(ModelError::Scaler(ScalerError::EmptyInput));
+            return Err(ModelError::Preprocessing(PreprocessingError::EmptyInput));
         }
         if x.shape()[0] != y.shape()[0] {
-            return Err(ModelError::Scaler(ScalerError::DimensionMismatch {
+            return Err(ModelError::Preprocessing(PreprocessingError::DimensionMismatch {
                 expected: x.shape()[0],
                 actual: y.shape()[0],
             }));
         }
         if self.k == 0 || self.k > x.shape()[0] {
-            return Err(ModelError::Scaler(ScalerError::InvalidParameter));
+            return Err(ModelError::Preprocessing(PreprocessingError::InvalidParameter));
         }
 
         let x_scaled = if self.normalize { self.x_scaler.fit_transform(x)? } else { x.clone() };
@@ -397,21 +397,21 @@ impl KNN {
     }
 
     pub fn predict(&self, x: &Array2<f64>) -> Result<Array1<f64>, ModelError> {
-        let x_train = self.x_train.as_ref().ok_or(ModelError::Scaler(ScalerError::NotFitted))?;
-        let y_train = self.y_train.as_ref().ok_or(ModelError::Scaler(ScalerError::NotFitted))?;
+        let x_train = self.x_train.as_ref().ok_or(ModelError::Preprocessing(PreprocessingError::NotFitted))?;
+        let y_train = self.y_train.as_ref().ok_or(ModelError::Preprocessing(PreprocessingError::NotFitted))?;
 
         if x.is_empty() {
-            return Err(ModelError::Scaler(ScalerError::EmptyInput));
+            return Err(ModelError::Preprocessing(PreprocessingError::EmptyInput));
         }
         if x.ncols() != x_train.ncols() {
-            return Err(ModelError::Scaler(ScalerError::DimensionMismatch {
+            return Err(ModelError::Preprocessing(PreprocessingError::DimensionMismatch {
                 expected: x_train.ncols(),
                 actual: x.ncols(),
             }));
         }
 
         let x_scaled = if self.normalize {
-            self.x_scaler.transform(x).map_err(ModelError::Scaler)?
+            self.x_scaler.transform(x).map_err(ModelError::Preprocessing)?
         } else {
             x.clone()
         };
@@ -439,7 +439,7 @@ impl KNN {
                         let label = y_train[idx];
                         // Optional: Validate labels for Iris (comment out for general use)
                         if label != 0.0 && label != 1.0 && label != 2.0 {
-                            return Err(ModelError::Scaler(ScalerError::InvalidParameter));
+                            return Err(ModelError::Preprocessing(PreprocessingError::InvalidParameter));
                         }
                         let label_int = label as usize; // Safe for 0.0, 1.0, 2.0
                         *class_counts.entry(label_int).or_insert(0) += 1;
@@ -485,7 +485,7 @@ mod tests {
         let x: Array2<f64> = Array2::zeros((0, 2));
         let y: Array1<f64> = Array1::zeros(0);
         let result = model.fit(&x, &y, 0.01, 10);
-        assert!(matches!(result, Err(ModelError::Scaler(ScalerError::EmptyInput))));
+        assert!(matches!(result, Err(ModelError::Preprocessing(PreprocessingError::EmptyInput))));
     }
 
     #[test]
@@ -494,7 +494,7 @@ mod tests {
         let x: Array2<f64> = Array2::zeros((2, 0));
         let y = array![1.0, 2.0];
         let result = model.fit(&x, &y, 0.01, 10);
-        assert!(matches!(result, Err(ModelError::Scaler(ScalerError::EmptyInput))));
+        assert!(matches!(result, Err(ModelError::Preprocessing(PreprocessingError::EmptyInput))));
     }
 
     #[test]
@@ -505,7 +505,7 @@ mod tests {
         let result = model.fit(&x, &y, 0.01, 10);
         assert!(matches!(
             result,
-            Err(ModelError::Scaler(ScalerError::DimensionMismatch { expected: 2, actual: 3 }))
+            Err(ModelError::Preprocessing(PreprocessingError::DimensionMismatch { expected: 2, actual: 3 }))
         ));
     }
 
@@ -514,7 +514,7 @@ mod tests {
         let model = LinearRegression::new().build();
         let x = array![[1.0, 2.0]];
         let result = model.predict(&x);
-        assert!(matches!(result, Err(ModelError::Scaler(ScalerError::NotFitted))));
+        assert!(matches!(result, Err(ModelError::Preprocessing(PreprocessingError::NotFitted))));
     }
 
     #[test]
@@ -527,7 +527,7 @@ mod tests {
         let result = model.predict(&x_test);
         assert!(matches!(
             result,
-            Err(ModelError::Scaler(ScalerError::DimensionMismatch { expected: 2, actual: 3 }))
+            Err(ModelError::Preprocessing(PreprocessingError::DimensionMismatch { expected: 2, actual: 3 }))
         ));
     }
 
@@ -562,7 +562,7 @@ mod tests {
         let x: Array2<f64> = Array2::zeros((0, 2));
         let y: Array1<f64> = Array1::zeros(0);
         let result = model.fit(&x, &y, 0.01, 10);
-        assert!(matches!(result, Err(ModelError::Scaler(ScalerError::EmptyInput))));
+        assert!(matches!(result, Err(ModelError::Preprocessing(PreprocessingError::EmptyInput))));
     }
 
     #[test]
@@ -571,7 +571,7 @@ mod tests {
         let x: Array2<f64> = Array2::zeros((2, 0));
         let y = array![0.0, 1.0];
         let result = model.fit(&x, &y, 0.01, 10);
-        assert!(matches!(result, Err(ModelError::Scaler(ScalerError::EmptyInput))));
+        assert!(matches!(result, Err(ModelError::Preprocessing(PreprocessingError::EmptyInput))));
     }
 
     #[test]
@@ -582,7 +582,7 @@ mod tests {
         let result = model.fit(&x, &y, 0.01, 10);
         assert!(matches!(
             result,
-            Err(ModelError::Scaler(ScalerError::DimensionMismatch { expected: 2, actual: 3 }))
+            Err(ModelError::Preprocessing(PreprocessingError::DimensionMismatch { expected: 2, actual: 3 }))
         ));
     }
 
@@ -594,7 +594,7 @@ mod tests {
         let result = model.fit(&x, &y, 0.01, 10);
         assert!(matches!(
             result,
-            Err(ModelError::Scaler(ScalerError::DimensionMismatch { expected: 1, actual: 0 }))
+            Err(ModelError::Preprocessing(PreprocessingError::DimensionMismatch { expected: 1, actual: 0 }))
         ));
     }
 
@@ -603,7 +603,7 @@ mod tests {
         let model = LogisticRegression::new().build();
         let x = array![[1.0, 2.0]];
         let result = model.predict(&x);
-        assert!(matches!(result, Err(ModelError::Scaler(ScalerError::NotFitted))));
+        assert!(matches!(result, Err(ModelError::Preprocessing(PreprocessingError::NotFitted))));
     }
 
     #[test]
@@ -616,7 +616,7 @@ mod tests {
         let result = model.predict(&x_test);
         assert!(matches!(
             result,
-            Err(ModelError::Scaler(ScalerError::DimensionMismatch { expected: 2, actual: 3 }))
+            Err(ModelError::Preprocessing(PreprocessingError::DimensionMismatch { expected: 2, actual: 3 }))
         ));
     }
 
@@ -661,7 +661,7 @@ mod tests {
         let x = array![[1.0, 2.0], [2.0, 3.0]];
         let y = array![1.0, 2.0];
         let result = knn.fit(&x, &y);
-        assert!(matches!(result, Err(ModelError::Scaler(ScalerError::InvalidParameter))));
+        assert!(matches!(result, Err(ModelError::Preprocessing(PreprocessingError::InvalidParameter))));
     }
 
     #[test]
@@ -670,7 +670,7 @@ mod tests {
         let x: Array2<f64> = Array2::zeros((0, 2));
         let y: Array1<f64> = Array1::zeros(0);
         let result = knn.fit(&x, &y);
-        assert!(matches!(result, Err(ModelError::Scaler(ScalerError::EmptyInput))));
+        assert!(matches!(result, Err(ModelError::Preprocessing(PreprocessingError::EmptyInput))));
     }
 
     #[test]
@@ -679,7 +679,7 @@ mod tests {
         let x: Array2<f64> = Array2::zeros((2, 0));
         let y = array![1.0, 2.0];
         let result = knn.fit(&x, &y);
-        assert!(matches!(result, Err(ModelError::Scaler(ScalerError::NoFeatures))));
+        assert!(matches!(result, Err(ModelError::Preprocessing(PreprocessingError::NoFeatures))));
     }
 
     #[test]
@@ -690,7 +690,7 @@ mod tests {
         let result = knn.fit(&x, &y);
         assert!(matches!(
             result,
-            Err(ModelError::Scaler(ScalerError::DimensionMismatch { expected: 2, actual: 3 }))
+            Err(ModelError::Preprocessing(PreprocessingError::DimensionMismatch { expected: 2, actual: 3 }))
         ));
     }
 
@@ -699,7 +699,7 @@ mod tests {
         let knn = KNN::new().build();
         let x = array![[1.0, 2.0]];
         let result = knn.predict(&x);
-        assert!(matches!(result, Err(ModelError::Scaler(ScalerError::NotFitted))));
+        assert!(matches!(result, Err(ModelError::Preprocessing(PreprocessingError::NotFitted))));
     }
 
     #[test]
@@ -712,7 +712,7 @@ mod tests {
         let result = knn.predict(&x_test);
         assert!(matches!(
             result,
-            Err(ModelError::Scaler(ScalerError::DimensionMismatch { expected: 2, actual: 3 }))
+            Err(ModelError::Preprocessing(PreprocessingError::DimensionMismatch { expected: 2, actual: 3 }))
         ));
     }
 }

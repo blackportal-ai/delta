@@ -38,12 +38,12 @@ pub struct CsvLoader;
 pub struct CsvHeadersLoader;
 
 pub trait DataLoader {
-    fn load<P: AsRef<std::path::Path>>(path: P) -> Result<(Array2<f64>, Array1<f64>), Self::Error>;
+    fn load<P: AsRef<Path>>(path: P) -> Result<(Array2<f64>, Array1<f64>), Self::Error>;
 
     type Error: std::error::Error + 'static;
 }
 
-pub fn load_data<T: DataLoader, P: AsRef<std::path::Path>>(
+pub fn load_data<T: DataLoader, P: AsRef<Path>>(
     path: P,
 ) -> Result<(Array2<f64>, Array1<f64>), T::Error> {
     T::load(path)
@@ -146,19 +146,19 @@ fn load_csv_common<P: AsRef<Path>>(
 }
 
 impl DataLoader for CsvLoader {
-    type Error = CsvError;
-
     fn load<P: AsRef<Path>>(path: P) -> Result<(Array2<f64>, Array1<f64>), Self::Error> {
         load_csv_common(path, false)
     }
+
+    type Error = CsvError;
 }
 
 impl DataLoader for CsvHeadersLoader {
-    type Error = CsvError;
-
     fn load<P: AsRef<Path>>(path: P) -> Result<(Array2<f64>, Array1<f64>), Self::Error> {
         load_csv_common(path, true)
     }
+
+    type Error = CsvError;
 }
 
 #[cfg(test)]

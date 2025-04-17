@@ -1,7 +1,7 @@
 use deltaml::{
     algorithms::{Classification, KNN},
     data::{CsvHeadersLoader, load_data},
-    scalers::StandardScaler,
+    preprocessors::StandardScaler,
 };
 
 #[tokio::main]

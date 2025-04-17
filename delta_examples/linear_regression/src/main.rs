@@ -3,7 +3,7 @@ use deltaml::{
     data::{CsvHeadersLoader, load_data},
     losses::MSE,
     optimizers::BatchGradientDescent,
-    scalers::StandardScaler,
+    preprocessors::StandardScaler,
 };
 
 #[tokio::main]

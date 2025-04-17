@@ -64,8 +64,8 @@ pub enum CsvError {
 
 #[derive(Error, Debug)]
 pub enum ModelError {
-    #[error("Scaler error: {0}")]
-    Scaler(#[from] ScalerError),
+    #[error("Preprocessing error: {0}")]
+    Preprocessing(#[from] PreprocessingError),
 
     #[error("Optimizer error: {0}")]
     Optimizer(#[from] OptimizerError),
@@ -75,14 +75,14 @@ pub enum ModelError {
 }
 
 #[derive(Error, Debug)]
-pub enum ScalerError {
+pub enum PreprocessingError {
     #[error("Input array is empty")]
     EmptyInput,
 
     #[error("Input array has no features (zero columns)")]
     NoFeatures,
 
-    #[error("Scaler not fitted: call fit_transform first")]
+    #[error("Not fitted: call fit_transform first")]
     NotFitted,
 
     #[error("Dimension mismatch: expected {expected} features, got {actual}")]

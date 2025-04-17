@@ -36,7 +36,7 @@ pub mod data;
 pub mod errors;
 pub mod losses;
 pub mod optimizers;
-pub mod scalers;
+pub mod preprocessors;
 
 // Re-exports for convenience
 pub mod ndarray {
