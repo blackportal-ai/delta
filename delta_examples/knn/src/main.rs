@@ -1,5 +1,5 @@
 use deltaml::{
-    algorithms::KNN,
+    algorithms::{Classification, KNN},
     data::{CsvHeadersLoader, load_data},
     scalers::StandardScaler,
 };
@@ -17,6 +17,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .k(3) // Use 3 nearest neighbors
         .scaler(StandardScaler::new())
         .normalize(true) // Standardize features for distance-based KNN
+        .mode(Classification)
         .build();
 
     // Train the model

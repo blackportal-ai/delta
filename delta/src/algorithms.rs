@@ -27,12 +27,17 @@
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::collections::HashMap;
+
 use ndarray::{Array1, Array2, Axis};
 
 use crate::errors::{LossError, ModelError, ScalerError};
 use crate::losses::{CrossEntropy, LossFunction, MSE};
 use crate::optimizers::{BatchGradientDescent, LogisticGradientDescent, Optimizer};
 use crate::scalers::StandardScaler;
+
+// Re-export KNNMode variants for cleaner syntax
+pub use self::KNNMode::{Classification, Regression};
 
 pub struct LinearRegressionBuilder {
     loss_function: Box<dyn LossFunction>,
@@ -302,10 +307,17 @@ impl LogisticRegression {
     }
 }
 
+#[derive(Clone, Copy)]
+pub enum KNNMode {
+    Classification,
+    Regression,
+}
+
 pub struct KNNBuilder {
     k: usize,
     normalize: bool,
     x_scaler: StandardScaler,
+    mode: KNNMode,
 }
 
 impl KNNBuilder {
@@ -324,6 +336,11 @@ impl KNNBuilder {
         self
     }
 
+    pub fn mode(mut self, mode: KNNMode) -> Self {
+        self.mode = mode;
+        self
+    }
+
     pub fn build(self) -> KNN {
         KNN {
             x_train: None,
@@ -331,6 +348,7 @@ impl KNNBuilder {
             k: self.k,
             normalize: self.normalize,
             x_scaler: self.x_scaler,
+            mode: self.mode,
         }
     }
 }
@@ -341,11 +359,17 @@ pub struct KNN {
     k: usize,
     normalize: bool,
     x_scaler: StandardScaler,
+    mode: KNNMode,
 }
 
 impl KNN {
     pub fn new() -> KNNBuilder {
-        KNNBuilder { k: 3, normalize: true, x_scaler: StandardScaler::new() }
+        KNNBuilder {
+            k: 3,
+            normalize: true,
+            x_scaler: StandardScaler::new(),
+            mode: KNNMode::Classification,
+        }
     }
 
     pub fn fit(&mut self, x: &Array2<f64>, y: &Array1<f64>) -> Result<(), ModelError> {
@@ -407,25 +431,32 @@ impl KNN {
             indices.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
             let k_indices = indices.iter().take(self.k).map(|&(idx, _)| idx);
 
-            // Collect class labels of k nearest neighbors as integers
-            let mut class_counts = std::collections::HashMap::new();
-            for idx in k_indices {
-                let label = y_train[idx];
-                // Ensure label is a valid class (0.0, 1.0, 2.0) and convert to usize
-                if label != 0.0 && label != 1.0 && label != 2.0 {
-                    return Err(ModelError::Scaler(ScalerError::InvalidParameter)); // Or handle differently
+            match self.mode {
+                KNNMode::Classification => {
+                    // Collect class labels of k nearest neighbors as integers
+                    let mut class_counts = HashMap::new();
+                    for idx in k_indices {
+                        let label = y_train[idx];
+                        // Optional: Validate labels for Iris (comment out for general use)
+                        if label != 0.0 && label != 1.0 && label != 2.0 {
+                            return Err(ModelError::Scaler(ScalerError::InvalidParameter));
+                        }
+                        let label_int = label as usize; // Safe for 0.0, 1.0, 2.0
+                        *class_counts.entry(label_int).or_insert(0) += 1;
+                    }
+
+                    let (predicted_class_int, _) = class_counts
+                        .into_iter()
+                        .max_by(|a, b| a.1.cmp(&b.1).then_with(|| b.0.cmp(&a.0)))
+                        .unwrap_or((0, 0)); // Default to class 0 if no votes
+                    predictions[i] = predicted_class_int as f64;
                 }
-                let label_int = label as usize; // Safe for 0.0, 1.0, 2.0
-                *class_counts.entry(label_int).or_insert(0) += 1;
+                KNNMode::Regression => {
+                    // Average the labels for regression
+                    let mean = k_indices.map(|idx| y_train[idx]).sum::<f64>() / self.k as f64;
+                    predictions[i] = mean;
+                }
             }
-
-            // Find the class with the most votes
-            let (predicted_class_int, _) = class_counts
-                .into_iter()
-                .max_by(|a, b| a.1.cmp(&b.1).then_with(|| b.0.cmp(&a.0))) // Tiebreaker: higher label
-                .unwrap_or((0, 0)); // Default to class 0 if no votes (edge case)
-
-            predictions[i] = predicted_class_int as f64; // Convert back to f64 for output
         }
         Ok(predictions)
     }
@@ -615,13 +646,13 @@ mod tests {
 
     #[test]
     fn knn_fit_predict() {
-        let mut knn = KNN::new().k(3).normalize(false).build();
+        let mut knn = KNN::new().k(3).normalize(false).mode(KNNMode::Regression).build();
         let x = array![[1.0, 2.0], [2.0, 3.0], [3.0, 4.0], [4.0, 5.0]];
         let y = array![1.0, 2.0, 3.0, 4.0];
         knn.fit(&x, &y).unwrap();
         let x_test = array![[2.5, 3.5]];
         let predictions = knn.predict(&x_test).unwrap();
-        assert!((predictions[0] - 2.0).abs() < 1e-3); // Average of y[1,2,3] ≈ (2.0 + 3.0 + 3.0) / 3
+        assert!((predictions[0] - 2.0).abs() < 1e-3); // Average of y[1,2,3] ≈ (2.0 + 3.0 + 1.0) / 3
     }
 
     #[test]
