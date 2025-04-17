@@ -91,6 +91,9 @@ pub enum ScalerError {
     #[error("Invalid numeric value (NaN or Inf) detected")]
     InvalidNumericValue,
 
+    #[error("Invalid parameter provided (e.g., k out of range)")]
+    InvalidParameter,
+
     #[error("Array operation failed: {0}")]
     ArrayOperation(#[from] ndarray::ShapeError),
 }

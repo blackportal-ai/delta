@@ -46,24 +46,20 @@ impl StandardScaler {
         if x.ncols() == 0 {
             return Err(ScalerError::NoFeatures);
         }
-
         if x.is_empty() {
             return Err(ScalerError::EmptyInput);
         }
+        if !x.iter().all(|&val| val.is_finite()) {
+            return Err(ScalerError::InvalidNumericValue);
+        }
 
-        self.mean = Some(x.mean_axis(Axis(0)).ok_or_else(|| {
-            ScalerError::ArrayOperation(ndarray::ShapeError::from_kind(
-                ndarray::ErrorKind::IncompatibleShape,
-            ))
-        })?);
+        let mean = x.mean_axis(Axis(0)).ok_or(ScalerError::EmptyInput)?;
+        let std =
+            x.var_axis(Axis(0), 0.0).mapv(|v| v.sqrt()).mapv(|s| if s < 1e-10 { 1.0 } else { s });
 
-        self.std = Some(
-            x.var_axis(Axis(0), 0.0).mapv(|v| v.sqrt()).mapv(|s| if s < 1e-10 { 1.0 } else { s }),
-        );
-
-        let mean = self.mean.as_ref().unwrap();
-        let std = self.std.as_ref().unwrap();
-        Ok((x - mean) / std)
+        self.mean = Some(mean.clone());
+        self.std = Some(std.clone());
+        Ok((x - &mean) / &std)
     }
 
     #[inline]
@@ -74,12 +70,14 @@ impl StandardScaler {
         if x.is_empty() {
             return Err(ScalerError::EmptyInput);
         }
-
         if x.ncols() != mean.len() {
             return Err(ScalerError::DimensionMismatch { expected: mean.len(), actual: x.ncols() });
         }
+        if !x.iter().all(|&val| val.is_finite()) {
+            return Err(ScalerError::InvalidNumericValue);
+        }
 
-        Ok((x - mean) / std)
+        Ok((x - mean) / std.mapv(|s| if s < 1e-10 { 1.0 } else { s }))
     }
 
     #[inline]
@@ -114,8 +112,13 @@ impl MinMaxScaler {
         if x.ncols() == 0 {
             return Err(ScalerError::NoFeatures);
         }
+
         if x.is_empty() {
             return Err(ScalerError::EmptyInput);
+        }
+
+        if !x.iter().all(|&val| val.is_finite()) {
+            return Err(ScalerError::InvalidNumericValue);
         }
 
         // Compute min and max for each column
@@ -131,6 +134,16 @@ impl MinMaxScaler {
     pub fn transform(&self, x: &Array2<f64>) -> Result<Array2<f64>, ScalerError> {
         let min = self.min.as_ref().ok_or(ScalerError::NotFitted)?;
         let max = self.max.as_ref().ok_or(ScalerError::NotFitted)?;
+        if x.is_empty() {
+            return Err(ScalerError::EmptyInput);
+        }
+        if x.ncols() != min.len() {
+            return Err(ScalerError::DimensionMismatch { expected: min.len(), actual: x.ncols() });
+        }
+        if !x.iter().all(|&val| val.is_finite()) {
+            return Err(ScalerError::InvalidNumericValue);
+        }
+
         let range_min = self.feature_range.0;
         let range_max = self.feature_range.1;
         let scale = (range_max - range_min) / (max - min).mapv(|v| if v < 1e-10 { 1.0 } else { v });

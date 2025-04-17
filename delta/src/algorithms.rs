@@ -302,6 +302,139 @@ impl LogisticRegression {
     }
 }
 
+pub struct KNNBuilder {
+    k: usize,
+    normalize: bool,
+    x_scaler: StandardScaler,
+    loss_function: Box<dyn LossFunction>,
+}
+
+impl KNNBuilder {
+    pub fn k(mut self, k: usize) -> Self {
+        self.k = k;
+        self
+    }
+
+    pub fn normalize(mut self, normalize: bool) -> Self {
+        self.normalize = normalize;
+        self
+    }
+
+    pub fn scaler(mut self, scaler: StandardScaler) -> Self {
+        self.x_scaler = scaler;
+        self
+    }
+
+    pub fn loss_function(mut self, loss_function: impl LossFunction + 'static) -> Self {
+        self.loss_function = Box::new(loss_function);
+        self
+    }
+
+    pub fn build(self) -> KNN {
+        KNN {
+            x_train: None,
+            y_train: None,
+            k: self.k,
+            normalize: self.normalize,
+            x_scaler: self.x_scaler,
+            loss_function: self.loss_function,
+        }
+    }
+}
+
+pub struct KNN {
+    x_train: Option<Array2<f64>>,
+    y_train: Option<Array1<f64>>,
+    k: usize,
+    normalize: bool,
+    x_scaler: StandardScaler,
+    loss_function: Box<dyn LossFunction>,
+}
+
+impl KNN {
+    pub fn new() -> KNNBuilder {
+        KNNBuilder {
+            k: 3,
+            normalize: true,
+            x_scaler: StandardScaler::new(),
+            loss_function: Box::new(MSE),
+        }
+    }
+
+    pub fn fit(&mut self, x: &Array2<f64>, y: &Array1<f64>) -> Result<(), ModelError> {
+        if x.ncols() == 0 {
+            return Err(ModelError::Scaler(ScalerError::NoFeatures));
+        }
+        if x.is_empty() || y.is_empty() {
+            return Err(ModelError::Scaler(ScalerError::EmptyInput));
+        }
+        if x.shape()[0] != y.shape()[0] {
+            return Err(ModelError::Scaler(ScalerError::DimensionMismatch {
+                expected: x.shape()[0],
+                actual: y.shape()[0],
+            }));
+        }
+        if self.k == 0 || self.k > x.shape()[0] {
+            return Err(ModelError::Scaler(ScalerError::InvalidParameter));
+        }
+
+        let x_scaled = if self.normalize { self.x_scaler.fit_transform(x)? } else { x.clone() };
+
+        self.x_train = Some(x_scaled);
+        self.y_train = Some(y.clone());
+        Ok(())
+    }
+
+    pub fn predict(&self, x: &Array2<f64>) -> Result<Array1<f64>, ModelError> {
+        let x_train = self.x_train.as_ref().ok_or(ModelError::Scaler(ScalerError::NotFitted))?;
+        let y_train = self.y_train.as_ref().ok_or(ModelError::Scaler(ScalerError::NotFitted))?;
+
+        if x.is_empty() {
+            return Err(ModelError::Scaler(ScalerError::EmptyInput));
+        }
+        if x.ncols() != x_train.ncols() {
+            return Err(ModelError::Scaler(ScalerError::DimensionMismatch {
+                expected: x_train.ncols(),
+                actual: x.ncols(),
+            }));
+        }
+
+        let x_scaled = if self.normalize {
+            self.x_scaler.transform(x).map_err(ModelError::Scaler)?
+        } else {
+            x.clone()
+        };
+
+        let mut predictions = Array1::zeros(x_scaled.nrows());
+        for (i, row) in x_scaled.axis_iter(Axis(0)).enumerate() {
+            let distances = Array1::from_iter(x_train.axis_iter(Axis(0)).map(|v| {
+                let squared_sum = ndarray::Zip::from(v).and(row).fold(0.0, |acc, &v_i, &row_i| {
+                    let diff = v_i - row_i;
+                    acc + diff * diff
+                });
+                squared_sum.sqrt()
+            }));
+
+            let mut indices: Vec<(usize, f64)> =
+                distances.iter().enumerate().map(|(i, &d)| (i, d)).collect();
+            indices.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+            let k_indices = indices.iter().take(self.k).map(|&(idx, _)| idx);
+
+            let mean = k_indices.map(|idx| y_train[idx]).sum::<f64>() / self.k as f64;
+            predictions[i] = mean;
+        }
+        Ok(predictions)
+    }
+
+    pub fn calculate_loss(
+        &self,
+        predictions: &Array1<f64>,
+        actuals: &Array1<f64>,
+    ) -> Result<f64, LossError> {
+        self.loss_function.calculate(predictions, actuals)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -473,5 +606,77 @@ mod tests {
         let actuals = array![0.0, 1.0];
         let loss = model.calculate_loss(&predictions, &actuals).unwrap();
         assert!(loss > 0.0);
+    }
+
+    #[test]
+    fn knn_fit_predict() {
+        let mut knn = KNN::new().k(3).loss_function(MSE).normalize(false).build();
+        let x = array![[1.0, 2.0], [2.0, 3.0], [3.0, 4.0], [4.0, 5.0]];
+        let y = array![1.0, 2.0, 3.0, 4.0];
+        knn.fit(&x, &y).unwrap();
+        let x_test = array![[2.5, 3.5]];
+        let predictions = knn.predict(&x_test).unwrap();
+        assert!((predictions[0] - 2.0).abs() < 1e-3); // Average of y[1,2,3] ≈ (2.0 + 3.0 + 3.0) / 3
+    }
+
+    #[test]
+    fn knn_invalid_k() {
+        let mut knn = KNN::new().k(5).build();
+        let x = array![[1.0, 2.0], [2.0, 3.0]];
+        let y = array![1.0, 2.0];
+        let result = knn.fit(&x, &y);
+        assert!(matches!(result, Err(ModelError::Scaler(ScalerError::InvalidParameter))));
+    }
+
+    #[test]
+    fn knn_empty_input() {
+        let mut knn = KNN::new().build();
+        let x: Array2<f64> = Array2::zeros((0, 2));
+        let y: Array1<f64> = Array1::zeros(0);
+        let result = knn.fit(&x, &y);
+        assert!(matches!(result, Err(ModelError::Scaler(ScalerError::EmptyInput))));
+    }
+
+    #[test]
+    fn knn_no_features() {
+        let mut knn = KNN::new().build();
+        let x: Array2<f64> = Array2::zeros((2, 0));
+        let y = array![1.0, 2.0];
+        let result = knn.fit(&x, &y);
+        assert!(matches!(result, Err(ModelError::Scaler(ScalerError::NoFeatures))));
+    }
+
+    #[test]
+    fn knn_dimension_mismatch() {
+        let mut knn = KNN::new().build();
+        let x = array![[1.0, 2.0], [3.0, 4.0]];
+        let y = array![1.0, 2.0, 3.0];
+        let result = knn.fit(&x, &y);
+        assert!(matches!(
+            result,
+            Err(ModelError::Scaler(ScalerError::DimensionMismatch { expected: 2, actual: 3 }))
+        ));
+    }
+
+    #[test]
+    fn knn_not_fitted() {
+        let knn = KNN::new().build();
+        let x = array![[1.0, 2.0]];
+        let result = knn.predict(&x);
+        assert!(matches!(result, Err(ModelError::Scaler(ScalerError::NotFitted))));
+    }
+
+    #[test]
+    fn knn_predict_dimension_mismatch() {
+        let mut knn = KNN::new().k(1).build();
+        let x = array![[1.0, 2.0], [3.0, 4.0]];
+        let y = array![1.0, 2.0];
+        knn.fit(&x, &y).unwrap();
+        let x_test = array![[1.0, 2.0, 3.0]];
+        let result = knn.predict(&x_test);
+        assert!(matches!(
+            result,
+            Err(ModelError::Scaler(ScalerError::DimensionMismatch { expected: 2, actual: 3 }))
+        ));
     }
 }
