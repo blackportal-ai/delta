@@ -8,11 +8,14 @@ use deltaml::{
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let train_path = concat!(env!("CARGO_MANIFEST_DIR"), "/train_data.csv");
+    let test_path = concat!(env!("CARGO_MANIFEST_DIR"), "/test_data.csv");
+
     // Using California Housing Dataset (already prepared with splits)
-    let (x_train, y_train) = load_data::<CsvHeadersLoader, _>("../train_data.csv")
+    let (x_train, y_train) = load_data::<CsvHeadersLoader, _>(train_path)
         .expect("Failed to load train_data.csv");
     let (x_test, y_test) =
-        load_data::<CsvHeadersLoader, _>("../test_data.csv").expect("Failed to load test_data.csv");
+        load_data::<CsvHeadersLoader, _>(test_path).expect("Failed to load test_data.csv");
 
     // Instantiate the model
     let mut model = LinearRegression::new()
