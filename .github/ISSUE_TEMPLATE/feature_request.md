@@ -14,7 +14,7 @@ assignees: ''
   - Did you check the latest version of the library?
   - Maybe it's in a form you didn't expect? 
 * Do you actually *need* this feature? Maybe restructuring your code would neatly eliminate the problem the feature would be solving.
-* Is the library in the imperator the best place for this feature? Maybe it would be better suited for some third-party library?
+* Is the library in the delta the best place for this feature? Maybe it would be better suited for some third-party library?
 -->
 
 **Use case**
