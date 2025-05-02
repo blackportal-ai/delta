@@ -132,3 +132,8 @@ rust-project.json
 
 # Flamegraph
 *.svg
+
+
+# Images in examples
+delta_examples/**/*.png
+delta_examples/**/*.jpg

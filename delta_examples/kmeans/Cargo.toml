@@ -1,0 +1,11 @@
+[package]
+name = "kmeans"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+deltaml = { path = "../../delta" }
+tokio = { workspace = true, features = ["full"] }
+linfa-datasets = { version = "0.7.1", features = ["iris"] }
+plotters = { version = "0.3.7" }
