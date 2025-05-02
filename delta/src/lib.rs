@@ -32,6 +32,7 @@ extern crate core;
 use std::path::PathBuf;
 
 pub mod algorithms;
+pub mod clustering;
 pub mod data;
 pub mod errors;
 pub mod losses;
