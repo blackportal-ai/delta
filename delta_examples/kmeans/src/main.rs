@@ -6,10 +6,10 @@ use plotters::prelude::*;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Load the Iris dataset (150 samples, 4 features)
     let dataset = iris();
-    let records_linfa = dataset.records.clone(); // это linfa::ndarray::Array2
+    let records_linfa = dataset.records.clone();
     let (n_samples, n_features) = records_linfa.dim();
 
-    // 2) Слить в Vec и собрать в deltaml::ndarray::Array2
+    // Convert the dataset to a 2D array
     let flat: Vec<f64> = records_linfa.iter().cloned().collect();
     let data: Array2<f64> = Array2::from_shape_vec((n_samples, n_features), flat)?;
 
