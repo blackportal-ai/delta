@@ -33,7 +33,7 @@ use crate::errors::LossError;
 
 pub trait LossFunction {
     fn calculate(&self, predictions: &Array1<f64>, actuals: &Array1<f64>)
-    -> Result<f64, LossError>;
+                 -> Result<f64, LossError>;
 }
 
 pub struct MSE;
@@ -73,6 +73,9 @@ impl LossFunction for CrossEntropy {
         predictions: &Array1<f64>,
         actuals: &Array1<f64>,
     ) -> Result<f64, LossError> {
+        let predictions = predictions.clone();
+        let actuals = actuals.clone();
+
         if predictions.is_empty() || actuals.is_empty() {
             return Err(LossError::EmptyInput);
         }
