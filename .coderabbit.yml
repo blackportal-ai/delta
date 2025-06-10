@@ -1,6 +1,6 @@
 version: 1
 reviews:
-  - name: rust-review
+  rust-review:
     tools:
       - clippy
     path_instructions:
