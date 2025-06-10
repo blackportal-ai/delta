@@ -435,20 +435,21 @@ impl KNN {
                 KNNMode::Classification => {
                     // Collect class labels of k nearest neighbors as integers
                     let mut class_counts = HashMap::new();
-                    for idx in k_indices {
-                        let label = y_train[idx];
-                        // Optional: Validate labels for Iris (comment out for general use)
-                        if label != 0.0 && label != 1.0 && label != 2.0 {
-                            return Err(ModelError::Preprocessing(PreprocessingError::InvalidParameter));
-                        }
-                        let label_int = label as usize; // Safe for 0.0, 1.0, 2.0
+                    let k_indices_vec: Vec<usize> = k_indices.collect();
+                    for idx in k_indices_vec.iter().cycle().take(self.k) {
+                        let label = y_train[*idx];
+                        let label_int = label.round() as usize;
                         *class_counts.entry(label_int).or_insert(0) += 1;
                     }
-
                     let (predicted_class_int, _) = class_counts
                         .into_iter()
-                        .max_by(|a, b| a.1.cmp(&b.1).then_with(|| b.0.cmp(&a.0)))
-                        .unwrap_or((0, 0)); // Default to class 0 if no votes
+                        .fold((0, 0), |(max_class, max_count), (class, count)| {
+                            if count > max_count || (count == max_count && class < max_class) {
+                                (class, count)
+                            } else {
+                                (max_class, max_count)
+                            }
+                        });
                     predictions[i] = predicted_class_int as f64;
                 }
                 KNNMode::Regression => {
