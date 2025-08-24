@@ -4,6 +4,7 @@ members = [
     "delta_examples/linear_regression",
     "delta_examples/logistic_regression",
     "delta_examples/knn",
+    "delta_examples/naive_bayes",
 ]
 resolver = "2"
 

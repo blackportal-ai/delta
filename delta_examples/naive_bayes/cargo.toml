@@ -1,0 +1,10 @@
+[package]
+name = "naive_bayes"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+deltaml = { path = "../../delta" }
+tokio = { workspace = true, features = ["full"] }
+ndarray = "0.16.1"
